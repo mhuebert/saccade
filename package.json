@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Evaluate the current top-level block of code in a Python Interactive Window.",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -16,13 +16,35 @@
       {
         "command": "extension.evaluatePythonToplevel",
         "title": "Saccade: Evaluate Toplevel Python"
+      },
+      {
+        "command": "extension.evaluatePythonToplevelAndMoveNext",
+        "title": "Saccade: Evaluate Toplevel Python and Move to Next"
       }
     ],
+    "configuration": {
+      "title": "Saccade",
+      "properties": {
+        "saccade.enabledCellMarkers": {
+          "type": "array",
+          "default": [
+            "# +",
+            "# %%"
+          ],
+          "description": "Enabled cell markers for Saccade extension"
+        }
+      }
+    },
     "keybindings": [
       {
         "command": "extension.evaluatePythonToplevel",
         "key": "ctrl+enter",
-        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting"
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow"
+      },
+      {
+        "command": "extension.evaluatePythonToplevelAndMoveNext",
+        "key": "shift+enter",
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow"
       }
     ]
   },
@@ -38,19 +60,32 @@
     "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "bump": "node scripts/bump.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
     "@types/mocha": "^10.0.7",
     "@types/node": "20.x",
+    "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.11.0",
-    "eslint": "^8.57.0",
-    "esbuild": "^0.21.5",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.4.5",
     "@vscode/test-cli": "^0.0.9",
-    "@vscode/test-electron": "^2.4.0"
-  }
+    "@vscode/test-electron": "^2.4.0",
+    "esbuild": "^0.21.5",
+    "eslint": "^8.57.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.4.5"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@lezer/python": "^1.1.14"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mhuebert/saccade.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mhuebert/saccade/issues"
+  },
+  "homepage": "https://github.com/mhuebert/saccade#readme"
 }

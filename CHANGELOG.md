@@ -6,4 +6,21 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
-- Initial release
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.1] - 2024-06-30
+
+### Added
+- Initial release of Saccade extension with core functionalities:
+  - Cell detection (explicit and implicit)
+  - Code execution in Jupyter
+  - Visual feedback (cell highlighting and flash effect)
+  - Navigation between cells
+- Basic error handling and user feedback
+- Configuration options for cell markers
+- Initial test suite
+
