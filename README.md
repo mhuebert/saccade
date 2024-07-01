@@ -1,6 +1,6 @@
 # Saccade: Rapid Python Eval
 
-Evaluates the current block of code in a Python Interactive Window, without explicit cell boundaries.
+Evaluate blocks of Python code without having to add explicit "cell" delimiters or other notebook-y metadata. Work in plain python files, and still benefit from notebook-like feedback.
 
 By default `ctrl-enter` evaluates the current block and stays there, `shift-enter` evaluates & moves to the next block.
 
