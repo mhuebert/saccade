@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { parser } from '@lezer/python';
+import { SyntaxNode } from '@lezer/common';
 
 // Add a console log at the beginning of the file
 console.log('Extension `saccade` is being loaded');
@@ -9,6 +10,7 @@ interface Cell {
     endLine: number;
     type: 'code' | 'markdown';
     metadata: { [key: string]: string };
+    text: string;
 }
 
 function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
@@ -66,55 +68,87 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
         endLine++;
     }
 
-    return { startLine, endLine, type: cellType, metadata };
+    const text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
+    return { startLine, endLine, type: cellType, metadata, text };
 }
-
 function getImplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     const code = document.getText();
     const tree = parser.parse(code);
+    let cursor = tree.cursor();
 
-    let startLine = position.line;
-    let endLine = position.line;
+    // Move cursor to the position
+    cursor.moveTo(document.offsetAt(position));
 
-    // Find the top-level node at the current position
-    let node = tree.resolveInner(document.offsetAt(position), 1);
-    while (node.parent && node.parent.type.name !== 'Script') {
-        node = node.parent;
-    }
-
-    if (node) {
-        // Handle the case where the cursor is at the start of the file
-        if (node.type.name === 'Script' && position.line === 0 && position.character === 0) {
-            // Find the first top-level node
-            node = node.firstChild || node;
-        }
-
-        if (node) {
-            const startPos = document.positionAt(node.from);
-            const endPos = document.positionAt(node.to);
-            startLine = startPos.line;
-            endLine = endPos.line;
-
-            // Include adjacent top-level blocks
-            while (startLine > 0) {
-                const prevLine = document.lineAt(startLine - 1);
-                if (prevLine.isEmptyOrWhitespace) {
-                    break;
-                }
-                startLine--;
-            }
-
-            while (endLine < document.lineCount - 1) {
-                const nextLine = document.lineAt(endLine + 1);
-                if (nextLine.isEmptyOrWhitespace) {
-                    break;
-                }
-                endLine++;
-            }
+    // Find the top-level node at or before the cursor position
+    while (cursor.parent()) {
+        if (cursor.node.parent === null) {
+            break;
         }
     }
 
-    return { startLine, endLine, type: 'code', metadata: {} };
+    // If we're at the Script node, find the first child that starts after the position
+    if (cursor.type.name === "Script") {
+        cursor.firstChild();
+        while (cursor.from <= document.offsetAt(position) && cursor.nextSibling()) {}
+        if (cursor.from > document.offsetAt(position) && cursor.prevSibling()) {}
+    }
+
+    // If we couldn't find a node, return null
+    if (!cursor.node) {
+        return null;
+    }
+
+    const currentNode = cursor.node;
+
+    // Find contiguous top-level nodes
+    let startNode = currentNode;
+    let endNode = currentNode;
+
+    // Traverse backwards to find the start of the block
+    while (startNode.prevSibling) {
+        if (hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
+            break;
+        }
+        startNode = startNode.prevSibling;
+    }
+
+    // Traverse forwards to find the end of the block
+    while (endNode.nextSibling) {
+        if (hasBlankLineBetween(code, endNode, endNode.nextSibling)) {
+            break;
+        }
+        endNode = endNode.nextSibling;
+    }
+
+    const startPos = document.positionAt(startNode.from);
+    const endPos = document.positionAt(endNode.to);
+    const startLine = startPos.line;
+    let endLine = endPos.line;
+
+    // Get the text without trailing newlines
+    let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
+    
+    // Remove trailing newlines from text, but keep track of how many we removed
+    const trailingNewlines = text.match(/\n*$/)?.[0].length ?? 0;
+    text = text.replace(/\n+$/, '');
+    
+    // Adjust endLine to account for removed trailing newlines
+    endLine -= trailingNewlines;
+
+    return { startLine, endLine, type: 'code', metadata: {}, text };
+}
+
+function hasBlankLineBetween(code: string, node1: SyntaxNode, node2: SyntaxNode): boolean {
+    if (!node1 || !node2 || node1.to >= node2.from) {
+        return false;
+    }
+    
+    const trailingNewlineNode1 = code.slice(node1.from, node1.to).endsWith('\n') ? 1 : 0;
+    const textBetween = code.slice(node1.to, node2.from);
+    const totalNewlines = trailingNewlineNode1 + (textBetween.match(/\n/g) || []).length;
+    const hasBlankLine = totalNewlines > 1;
+
+    return hasBlankLine;
 }
 
 export function parseMetadata(line: string): { [key: string]: string } {
@@ -166,15 +200,11 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
         return;
     }
 
-    const document = editor.document;
-    const range = new vscode.Range(cell.startLine, 0, cell.endLine, document.lineAt(cell.endLine).text.length);
-    const cellCode = document.getText(range);
-
     // Flash the cell
     flashCell(editor, cell);
 
     if (cell.type === 'code') {
-        await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cellCode);
+        await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
     } else {
         vscode.window.showInformationMessage('Selected cell is a Markdown cell and cannot be executed.');
     }
