@@ -8,7 +8,7 @@ The "current top-level block" is:
 * the current line, function, or class, plus:
 * any adjacent blocks not separated by a blank line
 
-> Saccades are [*rapid, ballistic movements of the eyes*](https://www.ncbi.nlm.nih.gov/books/NBK10991/#:~:text=Saccades%20are%20rapid%2C%20ballistic%20movements,while%20gazing%20around%20a%20room.) that abruptly change the point of fixation. Saccades are one of the [*fastest movements produced by the human body*](https://www.mdpi.com/2313-433X/8/3/76#:~:text=Saccades%20are%20one%20of%20the,25%20°%20of%20visual%20angle). The primary function of saccades is to [*bring new objects of interest on to the fovea*](https://www.uni-muenster.de/imperia/md/content/psyifp/ae_lappe/heins__f.__lappe__m.22.pdf). This allows the visual system to scan the environment quickly and efficiently, building up a detailed mental image despite having high resolution in only a small part of the retina.
+> Saccades are rapid, ballistic movements of the eyes that abruptly change the point of fixation [[1](https://www.ncbi.nlm.nih.gov/books/NBK10991/#:~:text=Saccades%20are%20rapid%2C%20ballistic%20movements,while%20gazing%20around%20a%20room.)]. Saccades are one of the fastest movements produced by the human body [[2](https://www.mdpi.com/2313-433X/8/3/76#:~:text=Saccades%20are%20one%20of%20the,25%20°%20of%20visual%20angle)]. The primary function of saccades is to bring new objects of interest on to the fovea [[3](https://www.uni-muenster.de/imperia/md/content/psyifp/ae_lappe/heins__f.__lappe__m.22.pdf)]. This allows the visual system to scan the environment quickly and efficiently, building up a detailed mental image despite having high resolution in only a small part of the retina.
 
 ![Saccade Demo](images/demo.gif)
 
