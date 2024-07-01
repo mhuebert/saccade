@@ -12,6 +12,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.2] - 2024-07-01
+
+### Fixed
+
+- Improved block detection
+- Tests passing
+
 ## [0.1.1] - 2024-06-30
 
 ### Added
