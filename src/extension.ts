@@ -339,7 +339,13 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
         if (nextCell) {
             const newPosition = new vscode.Position(nextCell.startLine, 0);
             editor.selection = new vscode.Selection(newPosition, newPosition);
-            editor.revealRange(new vscode.Range(newPosition, newPosition));
+            
+            // Calculate the range to reveal, including the next cell and some context
+            const endOfNextCell = new vscode.Position(nextCell.endLine, document.lineAt(nextCell.endLine).text.length);
+            const rangeToReveal = new vscode.Range(newPosition, endOfNextCell);
+            
+            // Reveal the range with a small amount of padding above and below
+            editor.revealRange(rangeToReveal, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
         }
     }
 }
