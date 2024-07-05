@@ -12,6 +12,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.4] - 2024-07-05
+
+### Changed
+
+- Do not show current cell border by default
+
+### Fixed
+
+- Do not run extension when the python interactive window input is active
+
 ## [0.1.3] - 2024-07-05
 
 ### Added
