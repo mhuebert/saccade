@@ -12,6 +12,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.3] - 2024-07-05
+
+### Added
+
+- Show border above/below the current cell
+- Use incremental parsing
+- Allow configuration: debug logging, decorations
+- Scroll next cell into view
+
 ## [0.1.2] - 2024-07-01
 
 ### Fixed

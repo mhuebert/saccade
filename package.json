@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Evaluate the current top-level block of code in a Python Interactive Window.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -92,7 +92,8 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
-    "bump": "node scripts/bump.js"
+    "bump": "node scripts/bump.js",
+    "commit-tag": "node scripts/tag.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.7",
