@@ -350,6 +350,13 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
     }
 }
 
+
+function isStandardEditor(editor: vscode.TextEditor | undefined): boolean {
+    return editor !== undefined && 
+           editor.document.languageId === 'python' && 
+           editor.viewColumn !== undefined;
+}
+
 export function activate(context: vscode.ExtensionContext) {
     try {
         let disposables: vscode.Disposable[] = [];
@@ -358,33 +365,27 @@ export function activate(context: vscode.ExtensionContext) {
 
         disposables.push(vscode.commands.registerCommand('extension.evaluatePythonToplevel', async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                vscode.window.showErrorMessage('No active editor');
-                return;
+            if (editor && isStandardEditor(editor)) {
+                const cell = getCellAtPosition(editor.document, editor.selection.active);
+                await evaluateCell(editor, cell);
             }
-
-            const cell = getCellAtPosition(editor.document, editor.selection.active);
-            await evaluateCell(editor, cell);
         }));
 
         disposables.push(vscode.commands.registerCommand('extension.evaluatePythonToplevelAndMoveNext', async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                vscode.window.showErrorMessage('No active editor');
-                return;
-            }
+            if (editor && isStandardEditor(editor)) {
+                const cell = getCellAtPosition(editor.document, editor.selection.active);
+                await evaluateCell(editor, cell);
 
-            const cell = getCellAtPosition(editor.document, editor.selection.active);
-            await evaluateCell(editor, cell);
-
-            if (cell) {
-                moveToNextCell(editor, cell);
+                if (cell) {
+                    moveToNextCell(editor, cell);
+                }
             }
         }));
 
         disposables.push(vscode.workspace.onDidChangeTextDocument(event => {
             const document = event.document;
-            if (lastTree) {
+            if (isStandardEditor(vscode.window.activeTextEditor) && lastTree) {
                 logger.time('Incremental parsing');
                 const changes = event.contentChanges.map(change => ({
                     fromA: document.offsetAt(change.range.start),
@@ -397,7 +398,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const newTree = parser.parse(new StringInput(document.getText()), fragments);
                 lastTree = newTree;
                 logger.timeEnd('Incremental parsing');
-            } else {
+            } else if (isStandardEditor(vscode.window.activeTextEditor)) {
                 logger.time('Full parsing');
                 lastTree = parser.parse(new StringInput(document.getText()));
                 logger.timeEnd('Full parsing');
@@ -406,8 +407,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         disposables.push(vscode.window.onDidChangeTextEditorSelection(event => {
             const editor = event.textEditor;
-            const cell = getCellAtPosition(editor.document, editor.selection.active);
-            decorations.decorateCurrentCell(editor, cell);
+            if (isStandardEditor(editor)) {
+                const cell = getCellAtPosition(editor.document, editor.selection.active);
+                decorations.decorateCurrentCell(editor, cell);
+            }
         }));
 
         disposables.push(vscode.workspace.onDidChangeConfiguration(e => {
@@ -415,7 +418,6 @@ export function activate(context: vscode.ExtensionContext) {
                 config = vscode.workspace.getConfiguration('saccade');
                 decorations.dispose();
                 decorations.initTypes();
-
             }
         }));
 

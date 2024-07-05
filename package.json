@@ -9,7 +9,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -60,8 +62,8 @@
           },
           "saccade.currentCell.border": {
             "type": "boolean",
-            "description": "Always render a border above/below the current cell",
-            "default": true
+            "description": "Decorate the current cell with a border above/below",
+            "default": false
           }
         }
       }
@@ -70,12 +72,12 @@
       {
         "command": "extension.evaluatePythonToplevel",
         "key": "ctrl+enter",
-        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow"
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       },
       {
         "command": "extension.evaluatePythonToplevelAndMoveNext",
         "key": "shift+enter",
-        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow"
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       }
     ]
   },
