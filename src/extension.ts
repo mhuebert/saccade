@@ -59,7 +59,7 @@ export function getCellAtPosition(document: vscode.TextDocument, position: vscod
 
 function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     const enabledCellMarkers: string[] = config.get('enabledCellMarkers', ['# +', '# %+', '# %%']);
-    
+
     let startLine = position.line;
     let endLine = position.line;
     let cellType: 'code' | 'markdown' = 'code';
@@ -81,7 +81,7 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
     // Find the end of the cell
     while (endLine < document.lineCount - 1) {
         const line = document.lineAt(endLine + 1).text.trim();
-        if (enabledCellMarkers.some(marker => line.startsWith(marker)) || 
+        if (enabledCellMarkers.some(marker => line.startsWith(marker)) ||
             line.startsWith('# -') || line.startsWith('# %-')) {
             break;
         }
@@ -93,7 +93,7 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
 }
 
 class StringInput implements Input {
-    constructor(private content: string) {}
+    constructor(private content: string) { }
 
     get length() { return this.content.length; }
 
@@ -110,7 +110,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     const code = document.getText();
     const input = new StringInput(code);
     const tree = parser.parse(input);
-    
+
     lastTree = tree;
     let cursor = tree.cursor();
 
@@ -127,8 +127,8 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     // If we're at the Script node, find the first child that starts after the position
     if (cursor.type.name === "Script") {
         cursor.firstChild();
-        while (cursor.from <= document.offsetAt(position) && cursor.nextSibling()) {}
-        if (cursor.from > document.offsetAt(position) && cursor.prevSibling()) {}
+        while (cursor.from <= document.offsetAt(position) && cursor.nextSibling()) { }
+        if (cursor.from > document.offsetAt(position) && cursor.prevSibling()) { }
     }
 
     // If we couldn't find a node, return null
@@ -165,11 +165,11 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
 
     // Get the text without trailing newlines
     let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
-    
+
     // Remove trailing newlines from text, but keep track of how many we removed
     const trailingNewlines = text.match(/\n*$/)?.[0].length ?? 0;
     text = text.replace(/\n+$/, '');
-    
+
     // Adjust endLine to account for removed trailing newlines
     endLine -= trailingNewlines;
 
@@ -180,7 +180,7 @@ function hasBlankLineBetween(code: string, node1: SyntaxNode, node2: SyntaxNode)
     if (!node1 || !node2 || node1.to >= node2.from) {
         return false;
     }
-    
+
     const trailingNewlineNode1 = code.slice(node1.from, node1.to).endsWith('\n') ? 1 : 0;
     const textBetween = code.slice(node1.to, node2.from);
     const totalNewlines = trailingNewlineNode1 + (textBetween.match(/\n/g) || []).length;
@@ -252,10 +252,10 @@ const decorations = {
     },
 
     decorateCurrentCell(editor: vscode.TextEditor, cell: Cell | null) {
-        
+
         this.clearAllDecorations(editor);
 
-        if(!config.get("currentCell.border", true)) {
+        if (!config.get("currentCell.border", true)) {
             return;
         }
 
@@ -339,11 +339,11 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
         if (nextCell) {
             const newPosition = new vscode.Position(nextCell.startLine, 0);
             editor.selection = new vscode.Selection(newPosition, newPosition);
-            
+
             // Calculate the range to reveal, including the next cell and some context
             const endOfNextCell = new vscode.Position(nextCell.endLine, document.lineAt(nextCell.endLine).text.length);
             const rangeToReveal = new vscode.Range(newPosition, endOfNextCell);
-            
+
             // Reveal the range with a small amount of padding above and below
             editor.revealRange(rangeToReveal, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
         }
@@ -352,9 +352,9 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
 
 
 function isStandardEditor(editor: vscode.TextEditor | undefined): boolean {
-    return editor !== undefined && 
-           editor.document.languageId === 'python' && 
-           editor.viewColumn !== undefined;
+    return editor !== undefined &&
+        editor.document.languageId === 'python' &&
+        editor.viewColumn !== undefined;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -393,7 +393,7 @@ export function activate(context: vscode.ExtensionContext) {
                     fromB: document.offsetAt(change.range.start),
                     toB: document.offsetAt(change.range.start) + change.text.length
                 }));
-                
+
                 const fragments = TreeFragment.applyChanges(TreeFragment.addTree(lastTree), changes);
                 const newTree = parser.parse(new StringInput(document.getText()), fragments);
                 lastTree = newTree;

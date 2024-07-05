@@ -95,7 +95,8 @@
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
     "bump": "node scripts/bump.js",
-    "commit-tag": "node scripts/tag.js"
+    "commit-tag": "node scripts/tag.js",
+    "release": "vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.7",
