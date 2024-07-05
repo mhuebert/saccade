@@ -22,19 +22,50 @@
         "title": "Saccade: Evaluate Toplevel Python and Move to Next"
       }
     ],
-    "configuration": {
-      "title": "Saccade",
-      "properties": {
-        "saccade.enabledCellMarkers": {
-          "type": "array",
-          "default": [
-            "# +",
-            "# %%"
-          ],
-          "description": "Enabled cell markers for Saccade extension"
+    "configuration": [
+      {
+        "title": "Saccade",
+        "properties": {
+          "saccade.debugMode": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable debug logging"
+          },
+          "saccade.enabledCellMarkers": {
+            "type": "array",
+            "default": [
+              "# +",
+              "# %%"
+            ],
+            "description": "Enabled cell markers for Saccade extension"
+          }
+        }
+      },
+      {
+        "title": "Decorations",
+        "properties": {
+          "saccade.currentCell.borderColor": {
+            "type": "string",
+            "default": "rgba(100, 100, 255, 0.2)",
+            "description": "Current cell decoration: border color"
+          },
+          "saccade.currentCell.borderWidth": {
+            "type": "string",
+            "default": "4px"
+          },
+          "saccade.cellFlash.color": {
+            "type": "string",
+            "description": "Background color to flash when a cell is evaluated",
+            "default": "rgba(100, 100, 255, 0.2)"
+          },
+          "saccade.currentCell.border": {
+            "type": "boolean",
+            "description": "Always render a border above/below the current cell",
+            "default": true
+          }
         }
       }
-    },
+    ],
     "keybindings": [
       {
         "command": "extension.evaluatePythonToplevel",
