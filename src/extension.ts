@@ -41,7 +41,7 @@ function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
     // Check only the first 100 lines for performance
     const linesToCheck = Math.min(document.lineCount, 100);
     for (let i = 0; i < linesToCheck; i++) {
-        const line = document.lineAt(i).text.trim();
+        const line = document.lineAt(i).text;
         if (enabledCellMarkers.some(marker => line.startsWith(marker))) {
             return true;
         }
@@ -371,7 +371,7 @@ function processCell(cellText: string): string {
     }
 
     if (hasMarkdown) {
-        processedLines.unshift('#\nfrom IPython.display import display, Markdown');
+        processedLines.unshift('# \nfrom IPython.display import display, Markdown');
     }
 
     return processedLines.join('\n');
