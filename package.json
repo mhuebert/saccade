@@ -1,7 +1,7 @@
 {
   "name": "saccade",
   "displayName": "saccade",
-  "description": "Evaluate the current top-level block of code in a Python Interactive Window.",
+  "description": "Python interactive evaluation without markup.",
   "version": "0.1.4",
   "engines": {
     "vscode": "^1.89.0"
@@ -16,12 +16,16 @@
   "contributes": {
     "commands": [
       {
-        "command": "extension.evaluatePythonToplevel",
+        "command": "extension.evaluateCell",
         "title": "Saccade: Evaluate Cell"
       },
       {
-        "command": "extension.evaluatePythonToplevelAndMoveNext",
+        "command": "extension.evaluateCellAndMoveNext",
         "title": "Saccade: Evaluate Cell and Move to Next"
+      },
+      {
+        "command": "extension.evaluateCellAndAbove",
+        "title": "Saccade: Evaluate Cell and Above"
       }
     ],
     "configuration": [
@@ -40,27 +44,22 @@
               "# %%"
             ],
             "description": "Enabled cell markers for Saccade extension"
+          },
+          "saccade.evaluateAbove.showAllCells": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show evaluation of all cells when running 'Evaluate Python Toplevel and Above'"
           }
         }
       },
       {
         "title": "Decorations",
         "properties": {
-          "saccade.currentCell.borderColor": {
-            "type": "string",
-            "default": "rgba(100, 100, 255, 0.2)",
-            "description": "Current cell decoration: border color"
-          },
           "saccade.currentCell.borderWidth": {
             "type": "string",
             "default": "4px"
           },
-          "saccade.cellFlash.color": {
-            "type": "string",
-            "description": "Background color to flash when a cell is evaluated",
-            "default": "rgba(100, 100, 255, 0.2)"
-          },
-          "saccade.currentCell.border": {
+          "saccade.currentCell.show": {
             "type": "boolean",
             "description": "Decorate the current cell with a border above/below",
             "default": false
@@ -70,14 +69,25 @@
     ],
     "keybindings": [
       {
-        "command": "extension.evaluatePythonToplevel",
+        "command": "extension.evaluateCell",
         "key": "ctrl+enter",
         "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       },
       {
-        "command": "extension.evaluatePythonToplevelAndMoveNext",
+        "command": "extension.evaluateCellAndMoveNext",
         "key": "shift+enter",
         "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
+      }
+    ],
+    "colors": [
+      {
+        "id": "saccade.accentColor",
+        "description": "Accent color for Saccade cells",
+        "defaults": {
+          "dark": "#6464FF33",
+          "light": "#6464FF33",
+          "highContrast": "#6464FF33"
+        }
       }
     ]
   },

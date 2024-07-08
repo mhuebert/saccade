@@ -8,7 +8,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
+- New `Evaluate Cell and Above` command
+
 ### Changed
+
+- Use 'cell' consistenty (instead of 'block' or 'toplevel form')
+- Use `saccade.accentColor` theme color instead of configuration value
 
 ### Fixed
 
@@ -35,7 +40,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
-- Improved block detection
+- Improved cell detection
 - Tests passing
 
 ## [0.1.1] - 2024-06-30

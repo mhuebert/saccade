@@ -142,7 +142,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     let startNode = currentNode;
     let endNode = currentNode;
 
-    // Traverse backwards to find the start of the block
+    // Traverse backwards to find the start of the cell
     while (startNode.prevSibling) {
         if (hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
             break;
@@ -150,7 +150,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
         startNode = startNode.prevSibling;
     }
 
-    // Traverse forwards to find the end of the block
+    // Traverse forwards to find the end of the cell
     while (endNode.nextSibling) {
         if (hasBlankLineBetween(code, endNode, endNode.nextSibling)) {
             break;
@@ -204,46 +204,53 @@ export function parseMetadata(line: string): { [key: string]: string } {
 const decorations = {
     createDecoration: vscode.window.createTextEditorDecorationType,
     types: {} as Record<string, vscode.TextEditorDecorationType>,
+    activeFlashes: new Set<vscode.Range>(),
 
     initTypes() {
-        const cellBorderColor = config.get('currentCell.borderColor', 'transparent');
+        const accentColor = new vscode.ThemeColor('saccade.accentColor');
         const cellBorderWidth = config.get('currentCell.borderWidth', '0');
-        const cellFlashColor = config.get('cellFlash.color', 'transparent');
 
         this.types = {
             cellTopAbove: this.createDecoration({
                 isWholeLine: true,
-                borderColor: cellBorderColor,
+                borderColor: accentColor,
                 borderStyle: 'solid',
                 borderWidth: `0 0 ${cellBorderWidth} 0`,
             }),
             cellTopOn: this.createDecoration({
                 isWholeLine: true,
-                borderColor: cellBorderColor,
+                borderColor: accentColor,
                 borderStyle: 'solid',
                 borderWidth: `${cellBorderWidth} 0 0 0`,
             }),
             cellBottomBelow: this.createDecoration({
-                borderColor: cellBorderColor,
+                borderColor: accentColor,
                 borderStyle: 'solid',
                 borderWidth: `${cellBorderWidth} 0 0 0`,
                 isWholeLine: true,
             }),
             cellBottomOn: this.createDecoration({
-                borderColor: cellBorderColor,
+                borderColor: accentColor,
                 borderStyle: 'solid',
                 borderWidth: `0 0 ${cellBorderWidth} 0`,
                 isWholeLine: true,
             }),
-            flash: this.createDecoration({
-                backgroundColor: cellFlashColor,
+            evaluating: this.createDecoration({
+                backgroundColor: accentColor,
                 isWholeLine: true,
+                overviewRulerColor: accentColor,
+                overviewRulerLane: vscode.OverviewRulerLane.Full,
             }),
         };
     },
 
     apply(editor: vscode.TextEditor, range: vscode.Range | null, decorationType: vscode.TextEditorDecorationType) {
-        editor.setDecorations(decorationType, range ? [range] : []);
+        if (range) {
+            if (decorationType === this.types.evaluating) {
+                this.activeFlashes.add(range);
+            }
+            editor.setDecorations(decorationType, decorationType === this.types.evaluating ? Array.from(this.activeFlashes) : [range]);
+        }
     },
 
     getCellRange(editor: vscode.TextEditor, cell: Cell | null): vscode.Range | null {
@@ -252,10 +259,9 @@ const decorations = {
     },
 
     decorateCurrentCell(editor: vscode.TextEditor, cell: Cell | null) {
-
         this.clearAllDecorations(editor);
 
-        if (!config.get("currentCell.border", true)) {
+        if (!config.get("currentCell.show", true)) {
             return;
         }
 
@@ -292,22 +298,36 @@ const decorations = {
         }
     },
 
-    flashCell(editor: vscode.TextEditor, cell: Cell | null) {
-        const range = this.getCellRange(editor, cell);
-        if (range) {
-            this.apply(editor, range, this.types.flash);
-            setTimeout(() => this.apply(editor, null, this.types.flash), 200); // Flash for 200ms
-        }
+    flashCell(editor: vscode.TextEditor, cell: Cell | null): Promise<vscode.Disposable> {
+        return new Promise((resolve) => {
+            const range = this.getCellRange(editor, cell);
+            if (range) {
+                this.apply(editor, range, this.types.evaluating);
+                const disposable = {
+                    dispose: () => {
+                        this.activeFlashes.delete(range);
+                        editor.setDecorations(this.types.evaluating, Array.from(this.activeFlashes));
+                    }
+                };
+                setTimeout(() => {
+                    resolve(disposable);
+                }, 200);
+            } else {
+                resolve({ dispose: () => {} });
+            }
+        });
     },
 
     clearAllDecorations(editor: vscode.TextEditor) {
+        this.activeFlashes.clear();
         Object.values(this.types).forEach(decorationType => {
-            this.apply(editor, null, decorationType);
+            editor.setDecorations(decorationType, []);
         });
     },
 
     dispose() {
         Object.values(this.types).forEach(decorationType => decorationType.dispose());
+        this.activeFlashes.clear();
     }
 };
 
@@ -317,12 +337,16 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
         return;
     }
 
-    decorations.flashCell(editor, cell);
+    const flashDisposable = decorations.flashCell(editor, cell);
 
-    if (cell.type === 'code') {
-        await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
-    } else {
-        vscode.window.showInformationMessage('Selected cell is a Markdown cell and cannot be executed.');
+    try {
+        if (cell.type === 'code') {
+            await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
+        } else {
+            vscode.window.showInformationMessage('Selected cell is a Markdown cell and cannot be executed.');
+        }
+    } finally {
+        (await flashDisposable).dispose();
     }
 }
 
@@ -350,6 +374,36 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
     }
 }
 
+async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
+    const document = editor.document;
+    const currentPosition = editor.selection.active;
+    const showAllCells = config.get('evaluateAbove.showAllCells', false);
+
+    let currentLine = 0;
+    while (currentLine <= currentPosition.line) {
+        const cell = getCellAtPosition(document, new vscode.Position(currentLine, 0));
+        if (cell) {
+            if (showAllCells || currentLine === currentPosition.line) {
+                await evaluateCell(editor, cell);
+            } else {
+                // Silently evaluate the cell
+                if (cell.type === 'code') {
+                    await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
+                }
+            }
+            // Move to the next non-empty line after the current cell
+            currentLine = cell.endLine + 1;
+            while (currentLine < document.lineCount && document.lineAt(currentLine).isEmptyOrWhitespace) {
+                currentLine++;
+            }
+        } else {
+            // If no cell is found, move to the next non-empty line
+            do {
+                currentLine++;
+            } while (currentLine < document.lineCount && document.lineAt(currentLine).isEmptyOrWhitespace);
+        }
+    }
+}
 
 function isStandardEditor(editor: vscode.TextEditor | undefined): boolean {
     return editor !== undefined &&
@@ -363,7 +417,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         decorations.initTypes();
 
-        disposables.push(vscode.commands.registerCommand('extension.evaluatePythonToplevel', async () => {
+        disposables.push(vscode.commands.registerCommand('extension.evaluateCell', async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
                 const cell = getCellAtPosition(editor.document, editor.selection.active);
@@ -371,7 +425,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }));
 
-        disposables.push(vscode.commands.registerCommand('extension.evaluatePythonToplevelAndMoveNext', async () => {
+        disposables.push(vscode.commands.registerCommand('extension.evaluateCellAndMoveNext', async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
                 const cell = getCellAtPosition(editor.document, editor.selection.active);
@@ -380,6 +434,13 @@ export function activate(context: vscode.ExtensionContext) {
                 if (cell) {
                     moveToNextCell(editor, cell);
                 }
+            }
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.evaluateCellAndAbove', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                await evaluateCellsAboveAndCurrent(editor);
             }
         }));
 

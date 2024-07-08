@@ -20,7 +20,7 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(cell2?.text, 'print("World")');
     });
 
-    test('getCellAtPosition returns correct cell for implicit blocks', async () => {
+    test('getCellAtPosition returns correct cell for implicit cells', async () => {
         const document = await vscode.workspace.openTextDocument({
             content: 'def func1():\n    print("Hello")\n\ndef func2():\n    print("World")',
             language: 'python'
@@ -35,7 +35,7 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(cell2?.text, 'def func2():\n    print("World")');
     });
 
-    test('getCellAtPosition handles empty lines between blocks', async () => {
+    test('getCellAtPosition handles empty lines between cells', async () => {
         const document = await vscode.workspace.openTextDocument({
             content: 'def func1():\n    print("Hello")\n\n\ndef func2():\n    print("World")',
             language: 'python'
@@ -50,7 +50,7 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(cell2?.text, 'def func2():\n    print("World")');
     });
 
-    test('getCellAtPosition handles nested blocks', async () => {
+    test('getCellAtPosition handles nested cells', async () => {
         const document = await vscode.workspace.openTextDocument({
             content: 'def outer():\n    print("Outer")\n    def inner():\n        print("Inner")\n    inner()',
             language: 'python'
@@ -87,7 +87,7 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(cell?.text, 'def outer():\n    print("Outer")\n    def inner():\n        print("Inner")\n    inner()');
     });
 
-    test('getCellAtPosition treats blocks separated by empty comment lines as one block', async () => {
+    test('getCellAtPosition treats cells separated by empty comment lines as one cell', async () => {
         const document = await vscode.workspace.openTextDocument({
             content: 'def func1():\n    print("Hello")\n#\n    print("Still in func1")\n\ndef func2():\n    print("World")',
             language: 'python'
