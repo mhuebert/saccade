@@ -74,7 +74,7 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
             cellType = 'markdown';
         }
     } else {
-        // Find the start of the cell
+        // Find the start of the cell, which might be the top of the document
         while (startLine > 0) {
             const line = document.lineAt(startLine - 1).text;
             if (topMarkerRegex.test(line)) {
@@ -360,6 +360,7 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
 }
 
 function moveToNextExplicitCell(editor: vscode.TextEditor, currentCell: Cell): void {
+    // if a next cell is found, move to it.
     const document = editor.document;
     let nextLine = currentCell.endLine + 1;
 
@@ -376,6 +377,7 @@ function moveToNextExplicitCell(editor: vscode.TextEditor, currentCell: Cell): v
 }
 
 function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
+    if (!currentCell) {return;};
     if (config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(editor.document)) {
         moveToNextExplicitCell(editor, currentCell);
         return;
