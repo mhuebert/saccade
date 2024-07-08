@@ -57,32 +57,41 @@ export function getCellAtPosition(document: vscode.TextDocument, position: vscod
     }
 }
 
-function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
-    const enabledCellMarkers: string[] = config.get('enabledCellMarkers', ['# +', '# %+', '# %%']);
+const topMarkerRegex = /^\s*(# \+|# %\+|# %%)\s*/;
+const bottomMarkerRegex = /^\s*(# -|# %-)\s*$/;
 
+function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     let startLine = position.line;
     let endLine = position.line;
     let cellType: 'code' | 'markdown' = 'code';
     let metadata: { [key: string]: string } = {};
 
-    // Find the start of the cell
-    while (startLine > 0) {
-        const line = document.lineAt(startLine - 1).text.trim();
-        if (enabledCellMarkers.some(marker => line.startsWith(marker))) {
-            metadata = parseMetadata(line);
-            if (line.includes('[markdown]')) {
-                cellType = 'markdown';
-            }
-            break;
+    // Check if the cursor is on a top marker line
+    const currentLine = document.lineAt(position.line).text;
+    if (topMarkerRegex.test(currentLine)) {
+        metadata = parseMetadata(currentLine);
+        if (currentLine.toLowerCase().includes('[markdown]')) {
+            cellType = 'markdown';
         }
-        startLine--;
+    } else {
+        // Find the start of the cell
+        while (startLine > 0) {
+            const line = document.lineAt(startLine - 1).text;
+            if (topMarkerRegex.test(line)) {
+                metadata = parseMetadata(line);
+                if (line.toLowerCase().includes('[markdown]')) {
+                    cellType = 'markdown';
+                }
+                break;
+            }
+            startLine--;
+        }
     }
 
     // Find the end of the cell
     while (endLine < document.lineCount - 1) {
-        const line = document.lineAt(endLine + 1).text.trim();
-        if (enabledCellMarkers.some(marker => line.startsWith(marker)) ||
-            line.startsWith('# -') || line.startsWith('# %-')) {
+        const line = document.lineAt(endLine + 1).text;
+        if (topMarkerRegex.test(line) || bottomMarkerRegex.test(line)) {
             break;
         }
         endLine++;
@@ -350,7 +359,27 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
     }
 }
 
+function moveToNextExplicitCell(editor: vscode.TextEditor, currentCell: Cell): void {
+    const document = editor.document;
+    let nextLine = currentCell.endLine + 1;
+
+    while (nextLine < document.lineCount) {
+        const line = document.lineAt(nextLine).text;
+        if (topMarkerRegex.test(line)) {
+            const newPosition = new vscode.Position(nextLine, 0);
+            editor.selection = new vscode.Selection(newPosition, newPosition);
+            editor.revealRange(new vscode.Range(newPosition, newPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+            break;
+        }
+        nextLine++;
+    }
+}
+
 function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
+    if (config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(editor.document)) {
+        moveToNextExplicitCell(editor, currentCell);
+        return;
+    }
     const document = editor.document;
     let nextLine = currentCell.endLine + 1;
 
@@ -421,9 +450,9 @@ export function activate(context: vscode.ExtensionContext) {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
                 const cell = getCellAtPosition(editor.document, editor.selection.active);
-                await evaluateCell(editor, cell);
 
                 if (cell) {
+                    await evaluateCell(editor, cell);
                     moveToNextCell(editor, cell);
                 }
             }
