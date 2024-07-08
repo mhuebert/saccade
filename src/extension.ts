@@ -340,6 +340,43 @@ const decorations = {
     }
 };
 
+function processCell(cellText: string): string {
+    const lines = cellText.split('\n');
+    let processedLines: string[] = [];
+    let markdownChunk: string[] = [];
+    let hasMarkdown = false;
+
+    function processMarkdownChunk() {
+        const markdownContent = markdownChunk.join('\n').trim();
+        if (markdownContent) {
+            processedLines.push(`display(Markdown(${JSON.stringify(markdownContent)}))`);
+            hasMarkdown = true;
+        }
+        markdownChunk = [];
+    }
+
+    for (const line of lines) {
+        if (line.match(/^#(?!\s*%)/)) {
+            markdownChunk.push(line.slice(1).trim());
+        } else {
+            if (markdownChunk.length > 0) {
+                processMarkdownChunk();
+            }
+            processedLines.push(line);
+        }
+    }
+
+    if (markdownChunk.length > 0) {
+        processMarkdownChunk();
+    }
+
+    if (hasMarkdown) {
+        processedLines.unshift('#\nfrom IPython.display import display, Markdown');
+    }
+
+    return processedLines.join('\n');
+}
+
 async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promise<void> {
     if (!cell) {
         vscode.window.showErrorMessage('No cell found at cursor position');
@@ -349,11 +386,8 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
     const flashDisposable = decorations.flashCell(editor, cell);
 
     try {
-        if (cell.type === 'code') {
-            await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
-        } else {
-            vscode.window.showInformationMessage('Selected cell is a Markdown cell and cannot be executed.');
-        }
+        const source = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown' ? processCell(cell.text) : cell.text;
+        await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
     } finally {
         (await flashDisposable).dispose();
     }

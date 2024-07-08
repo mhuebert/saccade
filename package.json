@@ -53,6 +53,11 @@
             "type": "boolean",
             "default": true,
             "description": "If true, use explicit cell markers when present. If false, always use implicit cell detection."
+          },
+          "saccade.renderMarkdownWithinCells": {
+            "type": "boolean",
+            "default": true,
+            "description": "If true, render comments within cells as Markdown"
           }
         }
       },
