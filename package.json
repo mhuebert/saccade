@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -45,10 +45,10 @@
             ],
             "description": "Enabled cell markers for Saccade extension"
           },
-          "saccade.evaluateAbove.showAllCells": {
+          "saccade.useExplicitCellsIfPresent": {
             "type": "boolean",
-            "default": false,
-            "description": "Show evaluation of all cells when running 'Evaluate Python Toplevel and Above'"
+            "default": true,
+            "description": "If true, use explicit cell markers when present. If false, always use implicit cell detection."
           }
         }
       },

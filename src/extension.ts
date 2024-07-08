@@ -50,7 +50,7 @@ function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
 }
 
 export function getCellAtPosition(document: vscode.TextDocument, position: vscode.Position): Cell | null {
-    if (checkForExplicitMarkers(document)) {
+    if (config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(document)) {
         return getExplicitCell(document, position);
     } else {
         return getImplicitCell(document, position);
@@ -377,20 +377,12 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
 async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
     const document = editor.document;
     const currentPosition = editor.selection.active;
-    const showAllCells = config.get('evaluateAbove.showAllCells', false);
 
     let currentLine = 0;
     while (currentLine <= currentPosition.line) {
         const cell = getCellAtPosition(document, new vscode.Position(currentLine, 0));
         if (cell) {
-            if (showAllCells || currentLine === currentPosition.line) {
-                await evaluateCell(editor, cell);
-            } else {
-                // Silently evaluate the cell
-                if (cell.type === 'code') {
-                    await vscode.commands.executeCommand('jupyter.execSelectionInteractive', cell.text);
-                }
-            }
+            await evaluateCell(editor, cell);
             // Move to the next non-empty line after the current cell
             currentLine = cell.endLine + 1;
             while (currentLine < document.lineCount && document.lineAt(currentLine).isEmptyOrWhitespace) {

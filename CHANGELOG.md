@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.7] - 2024-07-08
+
+### Added
+
+- New `UseExplicitCellsIfPresent` option (default: false) controls whether to use `# %%` markers if found in the doc.
+
 ## [0.1.6] - 2024-07-08
 
 ### Fixed
