@@ -26,6 +26,10 @@
       {
         "command": "extension.evaluateCellAndAbove",
         "title": "Saccade: Evaluate Cell and Above"
+      },
+      {
+        "command": "extension.evaluateImplicitCell",
+        "title": "Saccade: Evaluate Implicit Cell"
       }
     ],
     "configuration": [
@@ -76,6 +80,11 @@
       {
         "command": "extension.evaluateCellAndMoveNext",
         "key": "shift+enter",
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
+      },
+      {
+        "command": "extension.evaluateImplicitCell",
+        "key": "shift+ctrl+enter",
         "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       }
     ],

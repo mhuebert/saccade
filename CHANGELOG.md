@@ -8,9 +8,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
-### Changed
-
-### Fixed
+- New `evaluateImplicitCell`, bound to `Shift-Ctrl-Enter`, for evaluating the automatically detected cell even in the presence of explicit cell markers.
+- The `evaluateCell` and `evaluateImplicitCell` commands will evaluate the current selection if present, instead of the current cell.
 
 ## [0.1.8] - 2024-07-08
 

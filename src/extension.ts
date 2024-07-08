@@ -434,6 +434,20 @@ function isStandardEditor(editor: vscode.TextEditor | undefined): boolean {
         editor.viewColumn !== undefined;
 }
 
+async function evaluateSelection(editor: vscode.TextEditor): Promise<void> {
+    if (!editor.selection.isEmpty) {
+        // If there's a selection, evaluate it
+        const selectedText = editor.document.getText(editor.selection);
+        await evaluateCell(editor, {
+            startLine: editor.selection.start.line,
+            endLine: editor.selection.end.line,
+            type: 'code',
+            metadata: {},
+            text: selectedText
+        });
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     try {
         let disposables: vscode.Disposable[] = [];
@@ -443,8 +457,22 @@ export function activate(context: vscode.ExtensionContext) {
         disposables.push(vscode.commands.registerCommand('extension.evaluateCell', async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
-                const cell = getCellAtPosition(editor.document, editor.selection.active);
-                await evaluateCell(editor, cell);
+                if (!editor.selection.isEmpty) {
+                    await evaluateSelection(editor);
+                } else {
+                    await evaluateCell(editor, getCellAtPosition(editor.document, editor.selection.active));
+                }
+            }
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.evaluateImplicitCell', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                if (!editor.selection.isEmpty) {
+                    await evaluateSelection(editor);
+                } else {
+                    await evaluateCell(editor, getImplicitCell(editor.document, editor.selection.active));
+                }
             }
         }));
 
