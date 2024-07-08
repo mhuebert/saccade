@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.8] - 2024-07-08
+
+### Fixed
+
+- Fixed explicit cell detection
+
 ## [0.1.7] - 2024-07-08
 
 ### Added
