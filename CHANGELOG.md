@@ -8,6 +8,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.5] - 2024-07-08
+
+### Added
+
 - New `Evaluate Cell and Above` command
 
 ### Changed
