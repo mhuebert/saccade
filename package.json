@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "engines": {
     "vscode": "^1.89.0"
   },
