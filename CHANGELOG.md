@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.6] - 2024-07-08
+
+### Fixed
+
+- Release script fix
+
 ## [0.1.5] - 2024-07-08
 
 ### Added
@@ -22,8 +28,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Use 'cell' consistenty (instead of 'block' or 'toplevel form')
 - Use `saccade.accentColor` theme color instead of configuration value
-
-### Fixed
 
 ## [0.1.4] - 2024-07-05
 
