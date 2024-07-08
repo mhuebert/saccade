@@ -1,10 +1,10 @@
 # Saccade: Rapid Python Eval
 
-Evaluate blocks of Python code in an [interactive window](https://code.visualstudio.com/docs/python/jupyter-support-py#_using-the-python-interactive-window) without having to add explicit "cell" delimiters or other notebook-y metadata. Work in plain python files, and still benefit from notebook-like feedback.
+Evaluate Python in an [interactive window](https://code.visualstudio.com/docs/python/jupyter-support-py#_using-the-python-interactive-window) with automatic detection of "cell" boundaries - zero markup. Enjoy notebook-like feedback in plain python files.
 
-By default `ctrl-enter` evaluates the current block and stays there, `shift-enter` evaluates & moves to the next block.
+By default `ctrl-enter` evaluates the current cell and stays there, `shift-enter` evaluates & moves to the next cell.
 
-The "current top-level block" is:
+A "cell" is defined as:
 * the current line, function, or class, plus:
 * any adjacent blocks not separated by a blank line
 

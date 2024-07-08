@@ -17,11 +17,11 @@
     "commands": [
       {
         "command": "extension.evaluatePythonToplevel",
-        "title": "Saccade: Evaluate Toplevel Python"
+        "title": "Saccade: Evaluate Cell"
       },
       {
         "command": "extension.evaluatePythonToplevelAndMoveNext",
-        "title": "Saccade: Evaluate Toplevel Python and Move to Next"
+        "title": "Saccade: Evaluate Cell and Move to Next"
       }
     ],
     "configuration": [
@@ -105,6 +105,7 @@
     "@typescript-eslint/parser": "^7.11.0",
     "@vscode/test-cli": "^0.0.9",
     "@vscode/test-electron": "^2.4.0",
+    "@vscode/vsce": "^2.29.0",
     "esbuild": "^0.21.5",
     "eslint": "^8.57.0",
     "npm-run-all": "^4.1.5",
