@@ -8,9 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
-### Changed
-
-### Fixed
+- Add Generate Jupyter Notebook command
 
 ## [0.1.11] - 2024-07-08
 

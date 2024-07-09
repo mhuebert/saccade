@@ -30,6 +30,10 @@
       {
         "command": "extension.evaluateImplicitCell",
         "title": "Saccade: Evaluate Implicit Cell"
+      },
+      {
+        "command": "extension.generateNotebook",
+        "title": "Saccade: Generate Jupyter Notebook (.ipynb)"
       }
     ],
     "configuration": [

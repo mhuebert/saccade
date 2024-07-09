@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { parser } from '@lezer/python';
 import { SyntaxNode, TreeFragment, Input, Tree } from '@lezer/common';
+import * as fs from 'fs';
 
 let config = vscode.workspace.getConfiguration('saccade');
 
@@ -126,11 +127,10 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     // Move cursor to the position
     cursor.moveTo(document.offsetAt(position));
 
-    // Find the top-level node at or before the cursor position
+    // Find the top-level node at or before the cursor position.
+    // the loop will terminate when it reaches the top-level node.
     while (cursor.parent()) {
-        if (cursor.node.parent === null) {
-            break;
-        }
+        if (cursor.node.parent === null) break;
     }
 
     // If we're at the Script node, find the first child that starts after the position
@@ -140,31 +140,22 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
         if (cursor.from > document.offsetAt(position) && cursor.prevSibling()) { }
     }
 
-    // If we couldn't find a node, return null
-    if (!cursor.node) {
-        return null;
-    }
+    if (!cursor.node) return null;
 
-    const currentNode = cursor.node;
-
-    // Find contiguous top-level nodes
-    let startNode = currentNode;
-    let endNode = currentNode;
+    let startNode = cursor.node;
+    let endNode = cursor.node;
+    let onlyCommentNodes = isCommentNode(startNode);
 
     // Traverse backwards to find the start of the cell
-    while (startNode.prevSibling) {
-        if (hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
-            break;
-        }
+    while (startNode.prevSibling && !hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
         startNode = startNode.prevSibling;
+        onlyCommentNodes = onlyCommentNodes && isCommentNode(startNode);
     }
 
     // Traverse forwards to find the end of the cell
-    while (endNode.nextSibling) {
-        if (hasBlankLineBetween(code, endNode, endNode.nextSibling)) {
-            break;
-        }
+    while (endNode.nextSibling && !hasBlankLineBetween(code, endNode, endNode.nextSibling)) {
         endNode = endNode.nextSibling;
+        onlyCommentNodes = onlyCommentNodes && isCommentNode(endNode);
     }
 
     const startPos = document.positionAt(startNode.from);
@@ -172,17 +163,36 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     const startLine = startPos.line;
     let endLine = endPos.line;
 
-    // Get the text without trailing newlines
     let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
 
-    // Remove trailing newlines from text, but keep track of how many we removed
+
+
+    // Remove trailing newlines from cell
     const trailingNewlines = text.match(/\n*$/)?.[0].length ?? 0;
     text = text.replace(/\n+$/, '');
-
-    // Adjust endLine to account for removed trailing newlines
     endLine -= trailingNewlines;
 
-    return { startLine, endLine, type: 'code', metadata: {}, text };
+    const cellType = onlyCommentNodes && !text.startsWith('# ---') ? 'markdown' : 'code';
+
+    if (cellType === 'markdown') {
+        // Strip leading '#'s from each line for markdown cells
+        text = text.split('\n')
+            .map(line => line.replace(/^#+\s?/, ''))
+            .join('\n')
+            .trim();
+    }
+
+    return { 
+        startLine, 
+        endLine, 
+        type: cellType, 
+        metadata: {}, 
+        text 
+    };
+}
+
+function isCommentNode(node: SyntaxNode): boolean {
+    return node.type.name === "Comment";
 }
 
 function hasBlankLineBetween(code: string, node1: SyntaxNode, node2: SyntaxNode): boolean {
@@ -340,7 +350,12 @@ const decorations = {
     }
 };
 
-function processCell(cellText: string): string {
+function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
+    if (cellType === 'markdown') {
+        // For markdown cells, the text is already stripped of leading '#'s
+        return `display(Markdown(${JSON.stringify(cellText)}))`;
+    }
+
     const lines = cellText.split('\n');
     let processedLines: string[] = [];
     let markdownChunk: string[] = [];
@@ -386,7 +401,9 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
     const flashDisposable = decorations.flashCell(editor, cell);
 
     try {
-        const source = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown' ? processCell(cell.text) : cell.text;
+        const source = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown' 
+            ? processCell(cell.text, cell.type) 
+            : cell.text;
         await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
     } finally {
         (await flashDisposable).dispose();
@@ -439,26 +456,38 @@ function moveToNextCell(editor: vscode.TextEditor, currentCell: Cell): void {
     }
 }
 
-async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
-    const document = editor.document;
-    const currentPosition = editor.selection.active;
-
+function parseCells(document: vscode.TextDocument, upToLine?: number): Cell[] {
+    const cells: Cell[] = [];
     let currentLine = 0;
-    while (currentLine <= currentPosition.line) {
+    const lastLine = upToLine !== undefined ? Math.min(upToLine, document.lineCount - 1) : document.lineCount - 1;
+
+    while (currentLine <= lastLine) {
         const cell = getCellAtPosition(document, new vscode.Position(currentLine, 0));
         if (cell) {
-            await evaluateCell(editor, cell);
+            cells.push(cell);
             // Move to the next non-empty line after the current cell
             currentLine = cell.endLine + 1;
-            while (currentLine < document.lineCount && document.lineAt(currentLine).isEmptyOrWhitespace) {
+            while (currentLine <= lastLine && document.lineAt(currentLine).isEmptyOrWhitespace) {
                 currentLine++;
             }
         } else {
             // If no cell is found, move to the next non-empty line
             do {
                 currentLine++;
-            } while (currentLine < document.lineCount && document.lineAt(currentLine).isEmptyOrWhitespace);
+            } while (currentLine <= lastLine && document.lineAt(currentLine).isEmptyOrWhitespace);
         }
+    }
+
+    return cells;
+}
+
+async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
+    const document = editor.document;
+    const currentPosition = editor.selection.active;
+    const cells = parseCells(document, currentPosition.line);
+
+    for (const cell of cells) {
+        await evaluateCell(editor, cell);
     }
 }
 
@@ -480,6 +509,41 @@ async function evaluateSelection(editor: vscode.TextEditor): Promise<void> {
             text: selectedText
         });
     }
+}
+
+function generateNotebook(document: vscode.TextDocument): any {
+    const cells = parseCells(document);
+    const notebookCells = cells.map(cell => ({
+        cell_type: cell.type,
+        source: cell.text.split('\n'),
+        metadata: cell.metadata,
+        outputs: []
+    }));
+
+    return {
+        nbformat: 4,
+        nbformat_minor: 2,
+        metadata: {
+            kernelspec: {
+                display_name: "Python 3",
+                language: "python",
+                name: "python3"
+            },
+            language_info: {
+                codemirror_mode: {
+                    name: "ipython",
+                    version: 3
+                },
+                file_extension: ".py",
+                mimetype: "text/x-python",
+                name: "python",
+                nbconvert_exporter: "python",
+                pygments_lexer: "ipython3",
+                version: "3.8.0"
+            }
+        },
+        cells: notebookCells
+    };
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -564,6 +628,23 @@ export function activate(context: vscode.ExtensionContext) {
                 config = vscode.workspace.getConfiguration('saccade');
                 decorations.dispose();
                 decorations.initTypes();
+            }
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.generateNotebook', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                const notebook = generateNotebook(editor.document);
+                const currentFilePath = editor.document.fileName;
+                const notebookPath = currentFilePath.replace(/\.py$/, '.ipynb');
+                
+                fs.writeFile(notebookPath, JSON.stringify(notebook, null, 2), (err) => {
+                    if (err) {
+                        vscode.window.showErrorMessage(`Failed to save notebook: ${err.message}`);
+                    } else {
+                        vscode.window.showInformationMessage(`Notebook saved to ${notebookPath}`);
+                    }
+                });
             }
         }));
 
