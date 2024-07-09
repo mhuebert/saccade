@@ -32,7 +32,7 @@ interface Cell {
     startLine: number;
     endLine: number;
     type: 'code' | 'markdown';
-    metadata: { [key: string]: string };
+    metadata: Record<string, string>;
     text: string;
 }
 
@@ -42,8 +42,7 @@ function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
     // Check only the first 100 lines for performance
     const linesToCheck = Math.min(document.lineCount, 100);
     for (let i = 0; i < linesToCheck; i++) {
-        const line = document.lineAt(i).text;
-        if (enabledCellMarkers.some(marker => line.startsWith(marker))) {
+        if (enabledCellMarkers.some(marker => document.lineAt(i).text.startsWith(marker))) {
             return true;
         }
     }
@@ -51,11 +50,8 @@ function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
 }
 
 export function getCellAtPosition(document: vscode.TextDocument, position: vscode.Position): Cell | null {
-    if (config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(document)) {
-        return getExplicitCell(document, position);
-    } else {
-        return getImplicitCell(document, position);
-    }
+    const useExplicitCells = config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(document);
+    return useExplicitCells ? getExplicitCell(document, position) : getImplicitCell(document, position);
 }
 
 const topMarkerRegex = /^\s*(# \+|# %\+|# %%)\s*/;
@@ -65,24 +61,19 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
     let startLine = position.line;
     let endLine = position.line;
     let cellType: 'code' | 'markdown' = 'code';
-    let metadata: { [key: string]: string } = {};
-
-    // Check if the cursor is on a top marker line
+    let metadata: Record<string, string> = {};
+    
     const currentLine = document.lineAt(position.line).text;
     if (topMarkerRegex.test(currentLine)) {
         metadata = parseMetadata(currentLine);
-        if (currentLine.toLowerCase().includes('[markdown]')) {
-            cellType = 'markdown';
-        }
+        cellType = currentLine.toLowerCase().includes('[markdown]') ? 'markdown' : 'code';
     } else {
-        // Find the start of the cell, which might be the top of the document
+        // Find the start of the cell
         while (startLine > 0) {
             const line = document.lineAt(startLine - 1).text;
             if (topMarkerRegex.test(line)) {
                 metadata = parseMetadata(line);
-                if (line.toLowerCase().includes('[markdown]')) {
-                    cellType = 'markdown';
-                }
+                cellType = line.toLowerCase().includes('[markdown]') ? 'markdown' : 'code';
                 break;
             }
             startLine--;
@@ -127,8 +118,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     // Move cursor to the position
     cursor.moveTo(document.offsetAt(position));
 
-    // Find the top-level node at or before the cursor position.
-    // the loop will terminate when it reaches the top-level node.
+    // Find the top-level node at or before the cursor position
     while (cursor.parent()) {
         if (cursor.node.parent === null) break;
     }
@@ -164,8 +154,6 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     let endLine = endPos.line;
 
     let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
-
-
 
     // Remove trailing newlines from cell
     const trailingNewlines = text.match(/\n*$/)?.[0].length ?? 0;
@@ -203,13 +191,12 @@ function hasBlankLineBetween(code: string, node1: SyntaxNode, node2: SyntaxNode)
     const trailingNewlineNode1 = code.slice(node1.from, node1.to).endsWith('\n') ? 1 : 0;
     const textBetween = code.slice(node1.to, node2.from);
     const totalNewlines = trailingNewlineNode1 + (textBetween.match(/\n/g) || []).length;
-    const hasBlankLine = totalNewlines > 1;
 
-    return hasBlankLine;
+    return totalNewlines > 1;
 }
 
-export function parseMetadata(line: string): { [key: string]: string } {
-    const metadata: { [key: string]: string } = {};
+export function parseMetadata(line: string): Record<string, string> {
+    const metadata: Record<string, string> = {};
     const matches = line.match(/(\w+)\s*=\s*"([^"]*)"/g);
     if (matches) {
         matches.forEach(match => {
@@ -328,9 +315,7 @@ const decorations = {
                         editor.setDecorations(this.types.evaluating, Array.from(this.activeFlashes));
                     }
                 };
-                setTimeout(() => {
-                    resolve(disposable);
-                }, 200);
+                setTimeout(() => resolve(disposable), 200);
             } else {
                 resolve({ dispose: () => {} });
             }
@@ -352,7 +337,6 @@ const decorations = {
 
 function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
     if (cellType === 'markdown') {
-        // For markdown cells, the text is already stripped of leading '#'s
         return `display(Markdown(${JSON.stringify(cellText)}))`;
     }
 
@@ -401,9 +385,8 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
     const flashDisposable = decorations.flashCell(editor, cell);
 
     try {
-        const source = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown' 
-            ? processCell(cell.text, cell.type) 
-            : cell.text;
+        const renderMarkdown = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown';
+        const source = renderMarkdown ? processCell(cell.text, cell.type) : cell.text;
         await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
     } finally {
         (await flashDisposable).dispose();
@@ -411,7 +394,6 @@ async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promi
 }
 
 function moveToNextExplicitCell(editor: vscode.TextEditor, currentCell: Cell): void {
-    // if a next cell is found, move to it.
     const document = editor.document;
     let nextLine = currentCell.endLine + 1;
 
