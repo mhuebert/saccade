@@ -12,6 +12,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.13] - 2024-07-12
+
+### Changed
+
+- Run Current Cell and Above only shows the result for the current cell.
+- Comment paragraphs that begin with `# ---` or `# -*-` are rendered as code
+- Explicit cell starting lines (`# %%`) are not included in the cell text
+
 ## [0.1.12] - 2024-07-09
 
 ### Added
