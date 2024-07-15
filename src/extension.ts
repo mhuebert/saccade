@@ -343,16 +343,17 @@ const decorations = {
 };
 
 function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
+    const import_markdown = '# \nfrom IPython.display import display, Markdown'
     
     function wrapMarkdown(text: string) {
         if (/^\s*-[-*]-/.test(text)) {
             return text.split('\n').map(line => `# -${line}`).join('\n');
         } else {
-            return `display(Markdown(${JSON.stringify(text)}))`;
+            return `# \ndisplay(Markdown(${JSON.stringify(text)}))`;
         }
     }
     if (cellType === 'markdown') {
-        return wrapMarkdown(cellText);
+        return `${import_markdown}\n${wrapMarkdown(cellText)}`;
     }
 
     const lines = cellText.split('\n');
@@ -361,7 +362,7 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
     let hasMarkdown = false;
 
     function processMarkdownChunk() {
-        const markdownContent = markdownChunk.join('\n').trim();
+        const markdownContent = markdownChunk.filter(line => line.trim() !== '').join('\n');
         if (markdownContent) {
             processedLines.push(wrapMarkdown(markdownContent));
             hasMarkdown = true;
@@ -385,7 +386,7 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
     }
 
     if (hasMarkdown) {
-        processedLines.unshift('# \nfrom IPython.display import display, Markdown');
+        processedLines.unshift(import_markdown);
     }
 
     return processedLines.join('\n');
@@ -476,6 +477,24 @@ function parseCells(document: vscode.TextDocument, upToLine?: number): Cell[] {
     }
 
     return cells;
+}
+
+async function evaluateAllCells(editor: vscode.TextEditor): Promise<void> {
+    const document = editor.document;
+    const cells = parseCells(document);
+
+    for (const cell of cells) {
+        const flashDisposable = await decorations.flashCell(editor, cell);
+        try {
+            const renderMarkdown = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown';
+            const source = renderMarkdown ? processCell(cell.text, cell.type) : cell.text;
+            await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
+        } finally {
+            flashDisposable.dispose();
+        }
+        // Optional: Add a small delay between cell evaluations
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
 }
 
 async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
@@ -800,6 +819,13 @@ export function activate(context: vscode.ExtensionContext) {
         disposables.push(vscode.workspace.onDidChangeTextDocument(() => {
             // Clear the selection stack when the document changes
             clearSelectionStack();
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.evaluateAllCells', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                await evaluateAllCells(editor);
+            }
         }));
 
         context.subscriptions.push(...disposables);

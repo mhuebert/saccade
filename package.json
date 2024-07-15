@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -42,6 +42,10 @@
       {
         "command": "extension.shrinkSelection",
         "title": "Saccade: Shrink Selection"
+      },
+      {
+        "command": "extension.evaluateAllCells",
+        "title": "Saccade: Evaluate All Cells"
       }
     ],
     "configuration": [

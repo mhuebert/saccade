@@ -12,6 +12,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.16] - 2024-07-15
+
+### Added
+
+- "Evaluate All Cells" command
+
+### Fixed
+
+- Import markdown when rendering a markdown cell
+
 ## [0.1.15] - 2024-07-15
 
 ### Fixed
