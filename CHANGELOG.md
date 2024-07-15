@@ -12,6 +12,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+- More reliable markdown cell handling
+- Fixed "Run Cell and Above" with explicit cells
+
 ## [0.1.13] - 2024-07-12
 
 ### Changed

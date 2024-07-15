@@ -57,6 +57,13 @@ export function getCellAtPosition(document: vscode.TextDocument, position: vscod
 const topMarkerRegex = /^\s*(# \+|# %\+|# %%)\s*/;
 const bottomMarkerRegex = /^\s*(# -|# %-)\s*$/;
 
+function stripMarkdownComments(text: string): string {
+    return text.split('\n')
+        .map(line => line.replace(/^#+\s?/, ''))
+        .join('\n')
+        .trim();
+}
+
 function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     let startLine = position.line;
     let endLine = position.line;
@@ -67,6 +74,7 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
     if (topMarkerRegex.test(currentLine)) {
         metadata = parseMetadata(currentLine);
         cellType = currentLine.toLowerCase().includes('[markdown]') ? 'markdown' : 'code';
+        startLine++;
     } else {
         // Find the start of the cell
         while (startLine > 0) {
@@ -89,7 +97,10 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
         endLine++;
     }
 
-    const text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
+    let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
+    if (cellType === 'markdown') {
+        text = stripMarkdownComments(text);
+    }
     return { startLine, endLine, type: cellType, metadata, text };
 }
 
@@ -160,14 +171,10 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     text = text.replace(/\n+$/, '');
     endLine -= trailingNewlines;
 
-    const cellType = onlyCommentNodes && !text.startsWith('# ---') ? 'markdown' : 'code';
+    const cellType = onlyCommentNodes ? 'markdown' : 'code';
 
     if (cellType === 'markdown') {
-        // Strip leading '#'s from each line for markdown cells
-        text = text.split('\n')
-            .map(line => line.replace(/^#+\s?/, ''))
-            .join('\n')
-            .trim();
+        text = stripMarkdownComments(text);
     }
 
     return { 
@@ -336,8 +343,16 @@ const decorations = {
 };
 
 function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
+    
+    function wrapMarkdown(text: string) {
+        if (/^\s*-[-*]-/.test(text)) {
+            return text.split('\n').map(line => `# -${line}`).join('\n');
+        } else {
+            return `display(Markdown(${JSON.stringify(text)}))`;
+        }
+    }
     if (cellType === 'markdown') {
-        return `display(Markdown(${JSON.stringify(cellText)}))`;
+        return wrapMarkdown(cellText);
     }
 
     const lines = cellText.split('\n');
@@ -348,7 +363,7 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
     function processMarkdownChunk() {
         const markdownContent = markdownChunk.join('\n').trim();
         if (markdownContent) {
-            processedLines.push(`display(Markdown(${JSON.stringify(markdownContent)}))`);
+            processedLines.push(wrapMarkdown(markdownContent));
             hasMarkdown = true;
         }
         markdownChunk = [];
@@ -464,13 +479,27 @@ function parseCells(document: vscode.TextDocument, upToLine?: number): Cell[] {
 }
 
 async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<void> {
+    // TODO
+    // figure out how to run cells in the active kernel without showing the result 
+    // in the interactive window. Then we should be able to show the currently active 
+    // cell in the scrollbar area. 
+
     const document = editor.document;
     const currentPosition = editor.selection.active;
-    const cells = parseCells(document, currentPosition.line);
 
-    for (const cell of cells) {
-        await evaluateCell(editor, cell);
+    const currentCell = getCellAtPosition(document, currentPosition);
+    if (!currentCell) {
+        return; // Exit if no current cell is found
     }
+
+    const originalSelection = editor.selection;
+    const endOfCurrentCell = new vscode.Position(currentCell.endLine, document.lineAt(currentCell.endLine).text.length);
+    editor.selection = new vscode.Selection(endOfCurrentCell, endOfCurrentCell);
+
+    vscode.commands.executeCommand('jupyter.runtoline');
+    
+    editor.selection = originalSelection;
+    
 }
 
 function isStandardEditor(editor: vscode.TextEditor | undefined): boolean {
