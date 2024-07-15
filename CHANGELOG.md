@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.15] - 2024-07-15
+
+### Fixed
+
+- Fix package.json
+
 ## [0.1.14] - 2024-07-15
 
 ### Added

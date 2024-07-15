@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -36,7 +36,7 @@
         "title": "Saccade: Generate Jupyter Notebook (.ipynb)"
       },
       {
-        "command": "extension.shrinkSelection",
+        "command": "extension.growSelection",
         "title": "Saccade: Grow Selection"
       },
       {
