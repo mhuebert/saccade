@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -34,6 +34,14 @@
       {
         "command": "extension.generateNotebook",
         "title": "Saccade: Generate Jupyter Notebook (.ipynb)"
+      },
+      {
+        "command": "extension.shrinkSelection",
+        "title": "Saccade: Grow Selection"
+      },
+      {
+        "command": "extension.shrinkSelection",
+        "title": "Saccade: Shrink Selection"
       }
     ],
     "configuration": [
@@ -95,6 +103,16 @@
         "command": "extension.evaluateImplicitCell",
         "key": "shift+ctrl+enter",
         "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
+      },
+      {
+        "command": "extension.growSelection",
+        "key": "cmd+1",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "extension.shrinkSelection",
+        "key": "cmd+2",
+        "when": "editorTextFocus"
       }
     ],
     "colors": [

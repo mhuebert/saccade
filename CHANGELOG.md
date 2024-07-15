@@ -12,8 +12,17 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.14] - 2024-07-15
+
+### Added
+
+- Add "Grow Selection" and "Shrink Selection" commands
+
+### Fixed
+
 - More reliable markdown cell handling
 - Fixed "Run Cell and Above" with explicit cells
+- Rename "Generate Jupyter Notebook" to "Export Jupyter Notebook"
 
 ## [0.1.13] - 2024-07-12
 

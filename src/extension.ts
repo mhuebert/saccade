@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { parser } from '@lezer/python';
-import { SyntaxNode, TreeFragment, Input, Tree } from '@lezer/common';
+import { SyntaxNode, TreeFragment, Input, Tree, TreeCursor } from '@lezer/common';
 import * as fs from 'fs';
 
 let config = vscode.workspace.getConfiguration('saccade');
@@ -522,7 +522,7 @@ async function evaluateSelection(editor: vscode.TextEditor): Promise<void> {
     }
 }
 
-function generateNotebook(document: vscode.TextDocument): any {
+function exportNotebook(document: vscode.TextDocument): any {
     const cells = parseCells(document);
     const notebookCells = cells.map(cell => ({
         cell_type: cell.type,
@@ -557,11 +557,130 @@ function generateNotebook(document: vscode.TextDocument): any {
     };
 }
 
+let selectionStack: vscode.Selection[] = [];
+
+function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | null {
+
+    cursor.moveTo(cursorOffset);
+    let currentNode = cursor.node;
+
+    cursor.moveTo(cursorOffset - 1);
+    let prevNode = cursor.node?.to === cursorOffset ? cursor.node : null;
+
+    cursor.moveTo(cursorOffset + 1);
+    let nextNode = cursor.node?.from === cursorOffset ? cursor.node : null;
+
+    // Set targetNode to the smallest non-null node we found
+    return [prevNode, nextNode, currentNode]
+        .filter((node): node is SyntaxNode => node !== null)
+        .reduce((smallest, node) => 
+            !smallest || (node.to - node.from < smallest.to - smallest.from) ? node : smallest
+        );
+}
+
+function growSelection(editor: vscode.TextEditor): void {
+    const document = editor.document;
+    const currentSelection = editor.selection;
+
+    // Push the current selection onto the stack before expanding
+    selectionStack.push(currentSelection);
+
+    if (!lastTree) {
+        lastTree = parser.parse(new StringInput(document.getText()));
+    }
+
+    let cursor = lastTree.cursor();
+    let targetNode: SyntaxNode | null = null;
+
+    if (currentSelection.isEmpty) {
+        const cursorOffset = document.offsetAt(currentSelection.active);
+        targetNode = nodeAtCursor(cursorOffset, cursor);
+    } else {
+        // There's a selection, find its parent
+        const selectionStart = document.offsetAt(currentSelection.start);
+        const selectionEnd = document.offsetAt(currentSelection.end);
+
+        cursor.moveTo(selectionStart, 1);
+
+        while (cursor.node) {
+            if (cursor.from < selectionStart || cursor.to > selectionEnd) {
+                targetNode = cursor.node;
+                break;
+            }
+            if (!cursor.parent()) break;
+        }
+
+        // If we haven't found a target node, use the root node
+        if (!targetNode) {
+            targetNode = cursor.node;
+        }
+    }
+
+    if (targetNode) {
+        const newSelection = new vscode.Selection(
+            document.positionAt(targetNode.from),
+            document.positionAt(targetNode.to)
+        );
+        editor.selection = newSelection;
+    }
+}
+
+function shrinkSelection(editor: vscode.TextEditor): void {
+    if (selectionStack.length > 0) {
+        // If there's a previous selection in the stack, use it
+        editor.selection = selectionStack.pop()!;
+    } else {
+        // If the stack is empty, use the existing shrink logic
+        const document = editor.document;
+        const selection = editor.selection;
+
+        if (!lastTree) {
+            lastTree = parser.parse(new StringInput(document.getText()));
+        }
+
+        let cursor = lastTree.cursor();
+        const selectionStart = document.offsetAt(selection.start);
+        const selectionEnd = document.offsetAt(selection.end);
+
+        cursor.moveTo(selectionStart, 1);
+
+        let targetNode: SyntaxNode | null = null;
+        while (cursor.node) {
+            if (cursor.from >= selectionStart && cursor.to <= selectionEnd) {
+                targetNode = cursor.node;
+                if (!cursor.firstChild() || cursor.from < selectionStart || cursor.to > selectionEnd) {
+                    break;
+                }
+            } else {
+                if (!cursor.nextSibling()) break;
+            }
+        }
+
+        if (targetNode && (targetNode.from !== selectionStart || targetNode.to !== selectionEnd)) {
+            const newSelection = new vscode.Selection(
+                document.positionAt(targetNode.from),
+                document.positionAt(targetNode.to)
+            );
+            editor.selection = newSelection;
+        }
+    }
+}
+
+function clearSelectionStack() {
+    selectionStack = [];
+}
+
 export function activate(context: vscode.ExtensionContext) {
     try {
         let disposables: vscode.Disposable[] = [];
 
         decorations.initTypes();
+
+        // Parse the initial document if a Python file is already open
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor && isStandardEditor(activeEditor)) {
+            lastTree = parser.parse(new StringInput(activeEditor.document.getText()));
+        }
 
         disposables.push(vscode.commands.registerCommand('extension.evaluateCell', async () => {
             const editor = vscode.window.activeTextEditor;
@@ -631,6 +750,11 @@ export function activate(context: vscode.ExtensionContext) {
             if (isStandardEditor(editor)) {
                 const cell = getCellAtPosition(editor.document, editor.selection.active);
                 decorations.decorateCurrentCell(editor, cell);
+
+                // Clear the selection stack if the selection change wasn't caused by our commands
+                if (!event.kind) {
+                    clearSelectionStack();
+                }
             }
         }));
 
@@ -642,10 +766,10 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }));
 
-        disposables.push(vscode.commands.registerCommand('extension.generateNotebook', async () => {
+        disposables.push(vscode.commands.registerCommand('extension.exportNotebook', async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
-                const notebook = generateNotebook(editor.document);
+                const notebook = exportNotebook(editor.document);
                 const currentFilePath = editor.document.fileName;
                 const notebookPath = currentFilePath.replace(/\.py$/, '.ipynb');
                 
@@ -657,6 +781,25 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 });
             }
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.growSelection', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                growSelection(editor);
+            }
+        }));
+
+        disposables.push(vscode.commands.registerCommand('extension.shrinkSelection', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && isStandardEditor(editor)) {
+                shrinkSelection(editor);
+            }
+        }));
+
+        disposables.push(vscode.workspace.onDidChangeTextDocument(() => {
+            // Clear the selection stack when the document changes
+            clearSelectionStack();
         }));
 
         context.subscriptions.push(...disposables);
