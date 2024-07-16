@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.18] - 2024-07-16
+
+### Changed
+
+- Rename Grow Selection -> Expand Selection for consistency with conflicting commands
+
 ## [0.1.17] - 2024-07-16
 
 ### Fixed

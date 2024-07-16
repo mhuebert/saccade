@@ -590,7 +590,7 @@ function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | nu
         );
 }
 
-function growSelection(editor: vscode.TextEditor): void {
+function expandSelection(editor: vscode.TextEditor): void {
     const document = editor.document;
     const currentSelection = editor.selection;
 
@@ -795,10 +795,10 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }));
 
-        disposables.push(vscode.commands.registerCommand('extension.growSelection', () => {
+        disposables.push(vscode.commands.registerCommand('extension.expandSelection', () => {
             const editor = vscode.window.activeTextEditor;
             if (editor && isStandardEditor(editor)) {
-                growSelection(editor);
+                expandSelection(editor);
             }
         }));
 
