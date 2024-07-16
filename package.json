@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -111,12 +111,12 @@
       {
         "command": "extension.growSelection",
         "key": "cmd+1",
-        "when": "editorTextFocus"
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       },
       {
         "command": "extension.shrinkSelection",
         "key": "cmd+2",
-        "when": "editorTextFocus"
+        "when": "editorTextFocus && editorLangId == 'python' && !notebookCellListFocused && !inlineChatFocused && !notebookCellExecuting && !jupyter.executing && !jupyter.hasNativeCells && !jupyter.inInteractiveWindow && activeEditor !== 'workbench.editor.interactive'"
       }
     ],
     "colors": [
@@ -146,6 +146,7 @@
     "test": "vscode-test",
     "bump": "node scripts/bump.js",
     "commit-tag": "node scripts/tag.js",
+    "tag-release": "yarn bump && yarn commit-tag && git push --follow-tags",
     "release": "vsce package"
   },
   "devDependencies": {

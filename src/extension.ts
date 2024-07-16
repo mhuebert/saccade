@@ -353,10 +353,9 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
         }
     }
     if (cellType === 'markdown') {
-        return `${import_markdown}\n${wrapMarkdown(cellText)}`;
+        return `# \n${import_markdown}\n${wrapMarkdown(cellText)}`;
     }
 
-    const lines = cellText.split('\n');
     let processedLines: string[] = [];
     let markdownChunk: string[] = [];
     let hasMarkdown = false;
@@ -369,8 +368,8 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
         }
         markdownChunk = [];
     }
-
-    for (const line of lines) {
+    
+    for (const line of cellText.split('\n')) {
         if (line.match(/^#(?!\s*%)/)) {
             markdownChunk.push(line.slice(1).trim());
         } else {
@@ -579,15 +578,9 @@ function exportNotebook(document: vscode.TextDocument): any {
 let selectionStack: vscode.Selection[] = [];
 
 function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | null {
-
-    cursor.moveTo(cursorOffset);
-    let currentNode = cursor.node;
-
-    cursor.moveTo(cursorOffset - 1);
-    let prevNode = cursor.node?.to === cursorOffset ? cursor.node : null;
-
-    cursor.moveTo(cursorOffset + 1);
-    let nextNode = cursor.node?.from === cursorOffset ? cursor.node : null;
+    let currentNode = cursor.moveTo(cursorOffset).node;
+    let prevNode = cursor.moveTo(cursorOffset, -1).node;
+    let nextNode = cursor.moveTo(cursorOffset, 1).node;
 
     // Set targetNode to the smallest non-null node we found
     return [prevNode, nextNode, currentNode]

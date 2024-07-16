@@ -12,6 +12,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.17] - 2024-07-16
+
+### Fixed
+
+- Fix 'when' predicate for grow/shrink
+
 ## [0.1.16] - 2024-07-15
 
 ### Added
