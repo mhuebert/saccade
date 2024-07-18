@@ -31,7 +31,6 @@ const logger = {
 interface Cell {
     startLine: number;
     endLine: number;
-    type: 'code' | 'markdown';
     metadata: Record<string, string>;
     text: string;
 }
@@ -67,13 +66,11 @@ function stripMarkdownComments(text: string): string {
 function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     let startLine = position.line;
     let endLine = position.line;
-    let cellType: 'code' | 'markdown' = 'code';
     let metadata: Record<string, string> = {};
     
     const currentLine = document.lineAt(position.line).text;
     if (topMarkerRegex.test(currentLine)) {
         metadata = parseMetadata(currentLine);
-        cellType = currentLine.toLowerCase().includes('[markdown]') ? 'markdown' : 'code';
         startLine++;
     } else {
         // Find the start of the cell
@@ -81,7 +78,6 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
             const line = document.lineAt(startLine - 1).text;
             if (topMarkerRegex.test(line)) {
                 metadata = parseMetadata(line);
-                cellType = line.toLowerCase().includes('[markdown]') ? 'markdown' : 'code';
                 break;
             }
             startLine--;
@@ -98,10 +94,7 @@ function getExplicitCell(document: vscode.TextDocument, position: vscode.Positio
     }
 
     let text = document.getText(new vscode.Range(startLine, 0, endLine, document.lineAt(endLine).text.length));
-    if (cellType === 'markdown') {
-        text = stripMarkdownComments(text);
-    }
-    return { startLine, endLine, type: cellType, metadata, text };
+    return { startLine, endLine, metadata, text };
 }
 
 class StringInput implements Input {
@@ -171,16 +164,9 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     text = text.replace(/\n+$/, '');
     endLine -= trailingNewlines;
 
-    const cellType = onlyCommentNodes ? 'markdown' : 'code';
-
-    if (cellType === 'markdown') {
-        text = stripMarkdownComments(text);
-    }
-
     return { 
         startLine, 
-        endLine, 
-        type: cellType, 
+        endLine,
         metadata: {}, 
         text 
     };
@@ -342,7 +328,7 @@ const decorations = {
     }
 };
 
-function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
+function renderCommentsAsMarkdown(cellText: string) {
     const import_markdown = '# \nfrom IPython.display import display, Markdown'
     
     function wrapMarkdown(text: string) {
@@ -351,9 +337,6 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
         } else {
             return `# \ndisplay(Markdown(${JSON.stringify(text)}))`;
         }
-    }
-    if (cellType === 'markdown') {
-        return `# \n${import_markdown}\n${wrapMarkdown(cellText)}`;
     }
 
     let processedLines: string[] = [];
@@ -391,17 +374,30 @@ function processCell(cellText: string, cellType: 'code' | 'markdown'): string {
     return processedLines.join('\n');
 }
 
-async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null): Promise<void> {
+function stripComments(cellText: string): string {
+    return cellText.split('\n')
+        .filter(line => !line.startsWith('#'))
+        .join('\n');
+}
+
+async function evaluateCell(editor: vscode.TextEditor, cell: Cell | null, renderComments?: boolean): Promise<void> {
+    const shouldrenderComments = renderComments ?? config.get('renderComments', true);
+
     if (!cell) {
         vscode.window.showErrorMessage('No cell found at cursor position');
+        return; 
+    }
+
+    const source = shouldrenderComments ? renderCommentsAsMarkdown(cell.text) : stripComments(cell.text);
+
+    // Return early if the source is blank
+    if (!source.trim()) {
         return;
     }
 
     const flashDisposable = decorations.flashCell(editor, cell);
 
     try {
-        const renderMarkdown = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown';
-        const source = renderMarkdown ? processCell(cell.text, cell.type) : cell.text;
         await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
     } finally {
         (await flashDisposable).dispose();
@@ -478,21 +474,10 @@ function parseCells(document: vscode.TextDocument, upToLine?: number): Cell[] {
     return cells;
 }
 
-async function evaluateAllCells(editor: vscode.TextEditor): Promise<void> {
-    const document = editor.document;
-    const cells = parseCells(document);
 
-    for (const cell of cells) {
-        const flashDisposable = await decorations.flashCell(editor, cell);
-        try {
-            const renderMarkdown = config.get('renderMarkdownWithinCells', true) || cell.type === 'markdown';
-            const source = renderMarkdown ? processCell(cell.text, cell.type) : cell.text;
-            await vscode.commands.executeCommand('jupyter.execSelectionInteractive', source);
-        } finally {
-            flashDisposable.dispose();
-        }
-        // Optional: Add a small delay between cell evaluations
-        await new Promise(resolve => setTimeout(resolve, 100));
+async function evaluateAllCells(editor: vscode.TextEditor): Promise<void> {
+    for (const cell of parseCells(editor.document)) {
+        await evaluateCell(editor, cell, false);
     }
 }
 
@@ -533,7 +518,6 @@ async function evaluateSelection(editor: vscode.TextEditor): Promise<void> {
         await evaluateCell(editor, {
             startLine: editor.selection.start.line,
             endLine: editor.selection.end.line,
-            type: 'code',
             metadata: {},
             text: selectedText
         });
@@ -543,7 +527,6 @@ async function evaluateSelection(editor: vscode.TextEditor): Promise<void> {
 function exportNotebook(document: vscode.TextDocument): any {
     const cells = parseCells(document);
     const notebookCells = cells.map(cell => ({
-        cell_type: cell.type,
         source: cell.text.split('\n'),
         metadata: cell.metadata,
         outputs: []

@@ -12,6 +12,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.19] - 2024-07-18
+
+### Changed
+
+- Removed `cell.type` from cell
+- Renamed `renderMarkdownWithinCells` to `renderComments`
+- `[markdown]` metadata is now completely ignored
+- `evaluateAllCells` and `evaluateCellAndAbove` do not render comments, regardless of `renderComments` config
+
 ## [0.1.18] - 2024-07-16
 
 ### Changed
