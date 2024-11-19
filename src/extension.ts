@@ -56,13 +56,6 @@ export function getCellAtPosition(document: vscode.TextDocument, position: vscod
 const topMarkerRegex = /^\s*(# \+|# %\+|# %%)\s*/;
 const bottomMarkerRegex = /^\s*(# -|# %-)\s*$/;
 
-function stripMarkdownComments(text: string): string {
-    return text.split('\n')
-        .map(line => line.replace(/^#+\s?/, ''))
-        .join('\n')
-        .trim();
-}
-
 function getExplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
     let startLine = position.line;
     let endLine = position.line;
@@ -109,14 +102,53 @@ class StringInput implements Input {
     lineChunks = false;
 }
 
-let lastTree: Tree | null = null;
+interface ParseTreeState {
+    tree: Tree;
+    version: number;
+}
+
+let lastParseState: ParseTreeState | null = null;
+
+function ensureParseTree(document: vscode.TextDocument, changes?: readonly vscode.TextDocumentContentChangeEvent[]): void {
+    if (!isStandardEditor(vscode.window.activeTextEditor)) {
+        return;
+    }
+
+    // Return early if tree is already up to date
+    if (lastParseState && lastParseState.version === document.version) {
+        return;
+    }
+
+    if (changes && lastParseState) {
+        // Incremental parsing
+        logger.time('Incremental parsing');
+        const mappedChanges = changes.map(change => ({
+            fromA: document.offsetAt(change.range.start),
+            toA: document.offsetAt(change.range.end),
+            fromB: document.offsetAt(change.range.start),
+            toB: document.offsetAt(change.range.start) + change.text.length
+        }));
+
+        const fragments = TreeFragment.applyChanges(TreeFragment.addTree(lastParseState.tree), mappedChanges);
+        lastParseState = {
+            tree: parser.parse(new StringInput(document.getText()), fragments),
+            version: document.version
+        };
+        logger.timeEnd('Incremental parsing');
+    } else {
+        // Full parsing
+        logger.time('Full parsing');
+        lastParseState = {
+            tree: parser.parse(new StringInput(document.getText())),
+            version: document.version
+        };
+        logger.timeEnd('Full parsing');
+    }
+}
 
 function getImplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
-    const code = document.getText();
-    const input = new StringInput(code);
-    const tree = parser.parse(input);
-
-    lastTree = tree;
+    ensureParseTree(document);
+    const tree = lastParseState!.tree;
     let cursor = tree.cursor();
 
     // Move cursor to the position
@@ -496,11 +528,11 @@ async function evaluateCellsAboveAndCurrent(editor: vscode.TextEditor): Promise<
     }
 
     const originalSelection = editor.selection;
-    const endOfCurrentCell = new vscode.Position(currentCell.endLine, document.lineAt(currentCell.endLine).text.length);
-    editor.selection = new vscode.Selection(endOfCurrentCell, endOfCurrentCell);
-
-    vscode.commands.executeCommand('jupyter.runtoline');
-    
+    // jupyter.runtoline runs up to the previous line,
+    // so we must set our selection to the next line.
+    const runUntilPosition = new vscode.Position(currentCell.endLine + 1, 0);
+    editor.selection = new vscode.Selection(runUntilPosition, runUntilPosition);
+    await vscode.commands.executeCommand('jupyter.runtoline');
     editor.selection = originalSelection;
     
 }
@@ -576,15 +608,10 @@ function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | nu
 function expandSelection(editor: vscode.TextEditor): void {
     const document = editor.document;
     const currentSelection = editor.selection;
-
-    // Push the current selection onto the stack before expanding
     selectionStack.push(currentSelection);
 
-    if (!lastTree) {
-        lastTree = parser.parse(new StringInput(document.getText()));
-    }
-
-    let cursor = lastTree.cursor();
+    ensureParseTree(document);
+    const cursor = lastParseState!.tree.cursor();
     let targetNode: SyntaxNode | null = null;
 
     if (currentSelection.isEmpty) {
@@ -629,11 +656,8 @@ function shrinkSelection(editor: vscode.TextEditor): void {
         const document = editor.document;
         const selection = editor.selection;
 
-        if (!lastTree) {
-            lastTree = parser.parse(new StringInput(document.getText()));
-        }
-
-        let cursor = lastTree.cursor();
+        ensureParseTree(document);
+        const cursor = lastParseState!.tree.cursor();
         const selectionStart = document.offsetAt(selection.start);
         const selectionEnd = document.offsetAt(selection.end);
 
@@ -674,7 +698,10 @@ export function activate(context: vscode.ExtensionContext) {
         // Parse the initial document if a Python file is already open
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor && isStandardEditor(activeEditor)) {
-            lastTree = parser.parse(new StringInput(activeEditor.document.getText()));
+            lastParseState = {
+                tree: parser.parse(new StringInput(activeEditor.document.getText())),
+                version: activeEditor.document.version
+            };
         }
 
         disposables.push(vscode.commands.registerCommand('extension.evaluateCell', async () => {
@@ -719,25 +746,7 @@ export function activate(context: vscode.ExtensionContext) {
         }));
 
         disposables.push(vscode.workspace.onDidChangeTextDocument(event => {
-            const document = event.document;
-            if (isStandardEditor(vscode.window.activeTextEditor) && lastTree) {
-                logger.time('Incremental parsing');
-                const changes = event.contentChanges.map(change => ({
-                    fromA: document.offsetAt(change.range.start),
-                    toA: document.offsetAt(change.range.end),
-                    fromB: document.offsetAt(change.range.start),
-                    toB: document.offsetAt(change.range.start) + change.text.length
-                }));
-
-                const fragments = TreeFragment.applyChanges(TreeFragment.addTree(lastTree), changes);
-                const newTree = parser.parse(new StringInput(document.getText()), fragments);
-                lastTree = newTree;
-                logger.timeEnd('Incremental parsing');
-            } else if (isStandardEditor(vscode.window.activeTextEditor)) {
-                logger.time('Full parsing');
-                lastTree = parser.parse(new StringInput(document.getText()));
-                logger.timeEnd('Full parsing');
-            }
+            ensureParseTree(event.document, event.contentChanges);
         }));
 
         disposables.push(vscode.window.onDidChangeTextEditorSelection(event => {
