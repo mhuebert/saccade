@@ -171,6 +171,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     let startNode = cursor.node;
     let endNode = cursor.node;
     let onlyCommentNodes = isCommentNode(startNode);
+    const code = document.getText()
 
     // Traverse backwards to find the start of the cell
     while (startNode.prevSibling && !hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
