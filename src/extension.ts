@@ -107,19 +107,34 @@ interface ParseTreeState {
     version: number;
 }
 
-// Use document URI as key to store parse state per document
-const parseStateCache = new Map<string, ParseTreeState>();
+interface DocumentState {
+    parseTree?: ParseTreeState;
+    selectionStack: vscode.Selection[];
+    activeFlashes: Set<vscode.Range>;
+}
+
+const documentStates = new Map<string, DocumentState>();
+
+function getDocumentState(document: vscode.TextDocument | string): DocumentState {
+    const key = typeof document === 'string' ? document : document.uri.toString();
+    if (!documentStates.has(key)) {
+        documentStates.set(key, {
+            selectionStack: [],
+            activeFlashes: new Set()
+        });
+    }
+    return documentStates.get(key)!;
+}
 
 function getParseTree(document: vscode.TextDocument, changes?: readonly vscode.TextDocumentContentChangeEvent[]): Tree {
-    const documentKey = document.uri.toString();
-    const lastParseState = parseStateCache.get(documentKey);
+    const state = getDocumentState(document);
 
     // Return cached tree if up to date
-    if (lastParseState && lastParseState.version === document.version) {
-        return lastParseState.tree;
+    if (state.parseTree && state.parseTree.version === document.version) {
+        return state.parseTree.tree;
     }
 
-    if (changes && lastParseState) {
+    if (changes && state.parseTree) {
         // Incremental parsing
         logger.time('Incremental parsing');
         const mappedChanges = changes.map(change => ({
@@ -129,24 +144,22 @@ function getParseTree(document: vscode.TextDocument, changes?: readonly vscode.T
             toB: document.offsetAt(change.range.start) + change.text.length
         }));
 
-        const fragments = TreeFragment.applyChanges(TreeFragment.addTree(lastParseState.tree), mappedChanges);
-        const newState = {
+        const fragments = TreeFragment.applyChanges(TreeFragment.addTree(state.parseTree.tree), mappedChanges);
+        state.parseTree = {
             tree: parser.parse(new StringInput(document.getText()), fragments),
             version: document.version
         };
-        parseStateCache.set(documentKey, newState);
         logger.timeEnd('Incremental parsing');
-        return newState.tree;
+        return state.parseTree.tree;
     } else {
         // Full parsing
         logger.time('Full parsing');
-        const newState = {
+        state.parseTree = {
             tree: parser.parse(new StringInput(document.getText())),
             version: document.version
         };
-        parseStateCache.set(documentKey, newState);
         logger.timeEnd('Full parsing');
-        return newState.tree;
+        return state.parseTree.tree;
     }
 }
 
@@ -241,7 +254,6 @@ export function parseMetadata(line: string): Record<string, string> {
 const decorations = {
     createDecoration: vscode.window.createTextEditorDecorationType,
     types: {} as Record<string, vscode.TextEditorDecorationType>,
-    activeFlashes: new Map<string, Set<vscode.Range>>(),
 
     initTypes() {
         const accentColor = new vscode.ThemeColor('saccade.accentColor');
@@ -281,23 +293,15 @@ const decorations = {
         };
     },
 
-    getEditorFlashes(editor: vscode.TextEditor): Set<vscode.Range> {
-        const key = editor.document.uri.toString();
-        if (!this.activeFlashes.has(key)) {
-            this.activeFlashes.set(key, new Set());
-        }
-        return this.activeFlashes.get(key)!;
-    },
-
     apply(editor: vscode.TextEditor, range: vscode.Range | null, decorationType: vscode.TextEditorDecorationType) {
         if (range) {
-            const editorFlashes = this.getEditorFlashes(editor);
+            const state = getDocumentState(editor.document);
             if (decorationType === this.types.evaluating) {
-                editorFlashes.add(range);
+                state.activeFlashes.add(range);
             }
             editor.setDecorations(
                 decorationType, 
-                decorationType === this.types.evaluating ? Array.from(editorFlashes) : [range]
+                decorationType === this.types.evaluating ? Array.from(state.activeFlashes) : [range]
             );
         }
     },
@@ -352,11 +356,11 @@ const decorations = {
             const range = this.getCellRange(editor, cell);
             if (range) {
                 this.apply(editor, range, this.types.evaluating);
-                const editorFlashes = this.getEditorFlashes(editor);
+                const state = getDocumentState(editor.document);
                 const disposable = {
                     dispose: () => {
-                        editorFlashes.delete(range);
-                        editor.setDecorations(this.types.evaluating, Array.from(editorFlashes));
+                        state.activeFlashes.delete(range);
+                        editor.setDecorations(this.types.evaluating, Array.from(state.activeFlashes));
                     }
                 };
                 setTimeout(() => resolve(disposable), 200);
@@ -367,8 +371,8 @@ const decorations = {
     },
 
     clearAllDecorations(editor: vscode.TextEditor) {
-        const key = editor.document.uri.toString();
-        this.activeFlashes.delete(key);
+        const state = getDocumentState(editor.document);
+        state.activeFlashes.clear();
         Object.values(this.types).forEach(decorationType => {
             editor.setDecorations(decorationType, []);
         });
@@ -376,7 +380,6 @@ const decorations = {
 
     dispose() {
         Object.values(this.types).forEach(decorationType => decorationType.dispose());
-        this.activeFlashes.clear();
     }
 };
 
@@ -610,16 +613,6 @@ function exportNotebook(document: vscode.TextDocument): any {
     };
 }
 
-const selectionStacks = new Map<string, vscode.Selection[]>();
-
-function getSelectionStack(editor: vscode.TextEditor): vscode.Selection[] {
-    const key = editor.document.uri.toString();
-    if (!selectionStacks.has(key)) {
-        selectionStacks.set(key, []);
-    }
-    return selectionStacks.get(key)!;
-}
-
 function nodeAtCursor(cursorOffset: number, tree: Tree): SyntaxNode | null {
     let cursor = tree.cursor();
     let currentNode = cursor.moveTo(cursorOffset).node;
@@ -638,7 +631,9 @@ function expandSelection(editor: vscode.TextEditor): void {
 
     const document = editor.document;
     const currentSelection = editor.selection;
-    getSelectionStack(editor).push(currentSelection);
+    const state = getDocumentState(document);
+    
+    state.selectionStack.push(currentSelection);
 
     const tree = getParseTree(document);
     let targetNode: SyntaxNode | null = null;
@@ -680,9 +675,9 @@ function expandSelection(editor: vscode.TextEditor): void {
 function shrinkSelection(editor: vscode.TextEditor): void {
     if (editor.document.languageId !== 'python') return;
 
-    const selectionStack = getSelectionStack(editor);
-    if (selectionStack.length > 0) {
-        editor.selection = selectionStack.pop()!;
+    const state = getDocumentState(editor.document);
+    if (state.selectionStack.length > 0) {
+        editor.selection = state.selectionStack.pop()!;
         return;
     }
 
@@ -718,8 +713,8 @@ function shrinkSelection(editor: vscode.TextEditor): void {
 }
 
 function clearSelectionStack(editor: vscode.TextEditor) {
-    const selectionStack = getSelectionStack(editor);
-    selectionStack.length = 0;
+    const state = getDocumentState(editor.document);
+    state.selectionStack = [];
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -844,11 +839,8 @@ export function activate(context: vscode.ExtensionContext) {
         }));
 
         disposables.push(vscode.workspace.onDidCloseTextDocument(document => {
-            // Clean up any document-specific state
-            const uri = document.uri.toString();
-            parseStateCache.delete(uri);
-            decorations.activeFlashes.delete(uri);
-            selectionStacks.delete(uri);
+            // Clean up all document-specific state
+            documentStates.delete(document.uri.toString());
         }));
 
         context.subscriptions.push(...disposables);
