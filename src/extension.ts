@@ -266,7 +266,7 @@ function getImplicitCell(
   // Traverse backwards to find the start of the cell
   while (
     startNode.prevSibling &&
-    !hasBlankLineBetween(code, startNode.prevSibling, startNode)
+    !boundaryBetween(code, startNode, startNode.prevSibling)
   ) {
     startNode = startNode.prevSibling;
     onlyCommentNodes = onlyCommentNodes && isCommentNode(startNode);
@@ -275,7 +275,7 @@ function getImplicitCell(
   // Traverse forwards to find the end of the cell
   while (
     endNode.nextSibling &&
-    !hasBlankLineBetween(code, endNode, endNode.nextSibling)
+    !boundaryBetween(code, endNode, endNode.nextSibling)
   ) {
     endNode = endNode.nextSibling;
     onlyCommentNodes = onlyCommentNodes && isCommentNode(endNode);
@@ -312,21 +312,34 @@ function isCommentNode(node: SyntaxNode): boolean {
   return node.type.name === "Comment";
 }
 
-function hasBlankLineBetween(
+function boundaryBetween(
   code: string,
-  node1: SyntaxNode,
-  node2: SyntaxNode
+  fromNode: SyntaxNode,
+  toNode: SyntaxNode
 ): boolean {
-  if (!node1 || !node2 || node1.to >= node2.from) {
+  if (!fromNode || !toNode) {
     return false;
   }
 
-  const trailingNewlineNode1 = code.slice(node1.from, node1.to).endsWith("\n")
-    ? 1
-    : 0;
-  const textBetween = code.slice(node1.to, node2.from);
-  const totalNewlines =
-    trailingNewlineNode1 + (textBetween.match(/\n/g) || []).length;
+  // First check if we're looking at a cell marker ("# %%")
+  const isGoingUp = fromNode.from > toNode.from;
+  const targetNode = isGoingUp ? toNode : toNode;
+  const targetText = code.slice(targetNode.from, targetNode.to);
+  if (targetText.trim().startsWith("# %%")) {
+    return true;
+  }
+
+  // Then check for double newlines between nodes
+  // Order nodes so we always process them start->end
+  const [startNode, endNode] = isGoingUp 
+    ? [toNode, fromNode] 
+    : [fromNode, toNode];
+
+  const textFrom = code.slice(startNode.from, startNode.to);
+  const textBetween = code.slice(startNode.to, endNode.from);
+
+  const firstNodeNewline = textFrom.endsWith("\n") ? 1 : 0;
+  const totalNewlines = firstNodeNewline + (textBetween.match(/\n/g) || []).length;
 
   return totalNewlines > 1;
 }
