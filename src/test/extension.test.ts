@@ -50,7 +50,7 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(cell2?.text, 'def func2():\n    print("World")');
     });
 
-    test('getCellAtPosition handles nested cells', async () => {
+    test('getCellAtPosition handles nested functions', async () => {
         const document = await vscode.workspace.openTextDocument({
             content: 'def outer():\n    print("Outer")\n    def inner():\n        print("Inner")\n    inner()',
             language: 'python'

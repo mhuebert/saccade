@@ -107,16 +107,16 @@ interface ParseTreeState {
     version: number;
 }
 
-let lastParseState: ParseTreeState | null = null;
+// Use document URI as key to store parse state per document
+const parseStateCache = new Map<string, ParseTreeState>();
 
-function ensureParseTree(document: vscode.TextDocument, changes?: readonly vscode.TextDocumentContentChangeEvent[]): void {
-    if (!isStandardEditor(vscode.window.activeTextEditor)) {
-        return;
-    }
+function getParseTree(document: vscode.TextDocument, changes?: readonly vscode.TextDocumentContentChangeEvent[]): Tree {
+    const documentKey = document.uri.toString();
+    const lastParseState = parseStateCache.get(documentKey);
 
-    // Return early if tree is already up to date
+    // Return cached tree if up to date
     if (lastParseState && lastParseState.version === document.version) {
-        return;
+        return lastParseState.tree;
     }
 
     if (changes && lastParseState) {
@@ -130,25 +130,30 @@ function ensureParseTree(document: vscode.TextDocument, changes?: readonly vscod
         }));
 
         const fragments = TreeFragment.applyChanges(TreeFragment.addTree(lastParseState.tree), mappedChanges);
-        lastParseState = {
+        const newState = {
             tree: parser.parse(new StringInput(document.getText()), fragments),
             version: document.version
         };
+        parseStateCache.set(documentKey, newState);
         logger.timeEnd('Incremental parsing');
+        return newState.tree;
     } else {
         // Full parsing
         logger.time('Full parsing');
-        lastParseState = {
+        const newState = {
             tree: parser.parse(new StringInput(document.getText())),
             version: document.version
         };
+        parseStateCache.set(documentKey, newState);
         logger.timeEnd('Full parsing');
+        return newState.tree;
     }
 }
 
 function getImplicitCell(document: vscode.TextDocument, position: vscode.Position): Cell | null {
-    ensureParseTree(document);
-    const tree = lastParseState!.tree;
+    if (document.languageId !== 'python') return null;
+    
+    const tree = getParseTree(document);
     let cursor = tree.cursor();
 
     // Move cursor to the position
@@ -171,7 +176,7 @@ function getImplicitCell(document: vscode.TextDocument, position: vscode.Positio
     let startNode = cursor.node;
     let endNode = cursor.node;
     let onlyCommentNodes = isCommentNode(startNode);
-    const code = document.getText()
+    const code = document.getText();
 
     // Traverse backwards to find the start of the cell
     while (startNode.prevSibling && !hasBlankLineBetween(code, startNode.prevSibling, startNode)) {
@@ -593,12 +598,12 @@ function exportNotebook(document: vscode.TextDocument): any {
 
 let selectionStack: vscode.Selection[] = [];
 
-function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | null {
+function nodeAtCursor(cursorOffset: number, tree: Tree): SyntaxNode | null {
+    let cursor = tree.cursor();
     let currentNode = cursor.moveTo(cursorOffset).node;
     let prevNode = cursor.moveTo(cursorOffset, -1).node;
     let nextNode = cursor.moveTo(cursorOffset, 1).node;
 
-    // Set targetNode to the smallest non-null node we found
     return [prevNode, nextNode, currentNode]
         .filter((node): node is SyntaxNode => node !== null)
         .reduce((smallest, node) => 
@@ -607,22 +612,24 @@ function nodeAtCursor(cursorOffset: number, cursor: TreeCursor): SyntaxNode | nu
 }
 
 function expandSelection(editor: vscode.TextEditor): void {
+    if (editor.document.languageId !== 'python') return;
+
     const document = editor.document;
     const currentSelection = editor.selection;
     selectionStack.push(currentSelection);
 
-    ensureParseTree(document);
-    const cursor = lastParseState!.tree.cursor();
+    const tree = getParseTree(document);
     let targetNode: SyntaxNode | null = null;
 
     if (currentSelection.isEmpty) {
         const cursorOffset = document.offsetAt(currentSelection.active);
-        targetNode = nodeAtCursor(cursorOffset, cursor);
+        targetNode = nodeAtCursor(cursorOffset, tree);
     } else {
         // There's a selection, find its parent
         const selectionStart = document.offsetAt(currentSelection.start);
         const selectionEnd = document.offsetAt(currentSelection.end);
 
+        let cursor = tree.cursor();
         cursor.moveTo(selectionStart, 1);
 
         while (cursor.node) {
@@ -649,40 +656,41 @@ function expandSelection(editor: vscode.TextEditor): void {
 }
 
 function shrinkSelection(editor: vscode.TextEditor): void {
+    if (editor.document.languageId !== 'python') return;
+
     if (selectionStack.length > 0) {
-        // If there's a previous selection in the stack, use it
         editor.selection = selectionStack.pop()!;
-    } else {
-        // If the stack is empty, use the existing shrink logic
-        const document = editor.document;
-        const selection = editor.selection;
+        return;
+    }
 
-        ensureParseTree(document);
-        const cursor = lastParseState!.tree.cursor();
-        const selectionStart = document.offsetAt(selection.start);
-        const selectionEnd = document.offsetAt(selection.end);
+    const document = editor.document;
+    const selection = editor.selection;
 
-        cursor.moveTo(selectionStart, 1);
+    const tree = getParseTree(document);
+    const cursor = tree.cursor();
+    const selectionStart = document.offsetAt(selection.start);
+    const selectionEnd = document.offsetAt(selection.end);
 
-        let targetNode: SyntaxNode | null = null;
-        while (cursor.node) {
-            if (cursor.from >= selectionStart && cursor.to <= selectionEnd) {
-                targetNode = cursor.node;
-                if (!cursor.firstChild() || cursor.from < selectionStart || cursor.to > selectionEnd) {
-                    break;
-                }
-            } else {
-                if (!cursor.nextSibling()) break;
+    cursor.moveTo(selectionStart, 1);
+
+    let targetNode: SyntaxNode | null = null;
+    while (cursor.node) {
+        if (cursor.from >= selectionStart && cursor.to <= selectionEnd) {
+            targetNode = cursor.node;
+            if (!cursor.firstChild() || cursor.from < selectionStart || cursor.to > selectionEnd) {
+                break;
             }
+        } else {
+            if (!cursor.nextSibling()) break;
         }
+    }
 
-        if (targetNode && (targetNode.from !== selectionStart || targetNode.to !== selectionEnd)) {
-            const newSelection = new vscode.Selection(
-                document.positionAt(targetNode.from),
-                document.positionAt(targetNode.to)
-            );
-            editor.selection = newSelection;
-        }
+    if (targetNode && (targetNode.from !== selectionStart || targetNode.to !== selectionEnd)) {
+        const newSelection = new vscode.Selection(
+            document.positionAt(targetNode.from),
+            document.positionAt(targetNode.to)
+        );
+        editor.selection = newSelection;
     }
 }
 
@@ -696,13 +704,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         decorations.initTypes();
 
-        // Parse the initial document if a Python file is already open
+        // Initial parse
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor && isStandardEditor(activeEditor)) {
-            lastParseState = {
-                tree: parser.parse(new StringInput(activeEditor.document.getText())),
-                version: activeEditor.document.version
-            };
+            getParseTree(activeEditor.document);
         }
 
         disposables.push(vscode.commands.registerCommand('extension.evaluateCell', async () => {
@@ -747,7 +752,7 @@ export function activate(context: vscode.ExtensionContext) {
         }));
 
         disposables.push(vscode.workspace.onDidChangeTextDocument(event => {
-            ensureParseTree(event.document, event.contentChanges);
+            getParseTree(event.document, event.contentChanges);
         }));
 
         disposables.push(vscode.window.onDidChangeTextEditorSelection(event => {
