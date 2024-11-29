@@ -104,7 +104,7 @@ suite('Extension Test Suite', () => {
 
     test('parseMetadata correctly parses cell metadata', () => {
         const metadata = extension.parseMetadata('# %% [markdown] tag="test" id="123"');
-        assert.deepStrictEqual(metadata, { tag: 'test', id: '123' });
+        assert.deepEqual(metadata, {type: 'markdown', tag: 'test', id: '123'});
     });
 
     test('expandSelection grows from cursor to meaningful syntax nodes', async () => {
