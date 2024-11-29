@@ -12,6 +12,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
+## [0.1.23] - 2024-11-29
+
+### Added
+
+### Changed
+
+### Fixed
+
 ## [0.1.22] - 2024-11-29
 
 ### Added

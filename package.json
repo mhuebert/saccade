@@ -2,7 +2,7 @@
   "name": "saccade",
   "displayName": "saccade",
   "description": "Python interactive evaluation without markup.",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "engines": {
     "vscode": "^1.89.0"
   },
@@ -146,7 +146,7 @@
     "test": "vscode-test",
     "bump": "node scripts/bump.js",
     "commit-tag": "node scripts/tag.js",
-    "tag-release": "yarn bump && yarn commit-tag && git push --follow-tags",
+    "cut": "yarn bump && yarn commit-tag && git push --follow-tags",
     "release": "vsce package"
   },
   "devDependencies": {
