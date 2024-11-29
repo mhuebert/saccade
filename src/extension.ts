@@ -48,7 +48,14 @@ function checkForExplicitMarkers(document: vscode.TextDocument): boolean {
     return false;
 }
 
-export function getCellAtPosition(document: vscode.TextDocument, position: vscode.Position): Cell | null {
+export function getCellAtPosition(document: vscode.TextDocument, position: vscode.Position, mode: 'implicit' | 'explicit' | 'auto' = 'auto'): Cell | null {
+    if (mode === 'implicit') {
+        return getImplicitCell(document, position);
+    }
+    if (mode === 'explicit') {
+        return checkForExplicitMarkers(document) ? getExplicitCell(document, position) : null;
+    }
+    // auto mode
     const useExplicitCells = config.get('useExplicitCellsIfPresent', false) && checkForExplicitMarkers(document);
     return useExplicitCells ? getExplicitCell(document, position) : getImplicitCell(document, position);
 }
@@ -626,19 +633,13 @@ function nodeAtCursor(cursorOffset: number, tree: Tree): SyntaxNode | null {
         );
 }
 
-function getCellRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range | null {
-    const cell = getCellAtPosition(document, position);
-    if (!cell) return null;
+function getCellRange(document: vscode.TextDocument, position: vscode.Position, mode: 'implicit' | 'explicit' | 'auto' = 'auto'): vscode.Range | null {
+    const cell = getCellAtPosition(document, position, mode);
+    if (!cell) {return null;};
     return new vscode.Range(
         new vscode.Position(cell.startLine, 0),
-        new vscode.Position(cell.endLine, document.lineAt(cell.endLine).text.length)
+        new vscode.Position(cell.endLine, document.lineAt(cell.endLine).text.trimEnd().length)
     );
-}
-
-function getCellSelection(document: vscode.TextDocument, position: vscode.Position): vscode.Selection | null {
-    const range = getCellRange(document, position);
-    if (!range) return null;
-    return new vscode.Selection(range.start, range.end);
 }
 
 function isLargerThan(range: vscode.Range, selection: vscode.Selection): boolean {
@@ -655,17 +656,25 @@ function nodeBounds(node: SyntaxNode, document: vscode.TextDocument): { start: n
     let start = node.from;
     let end = node.to;
 
+    // Get text content of node
+    let nodeText = document.getText(new vscode.Range(
+        document.positionAt(start),
+        document.positionAt(end)
+    ));
+
     if (node.type.name === "Body") {
         // Trim : and whitespace from start of body, and newlines from end
-        let bodyText = document.getText(new vscode.Range(
-            document.positionAt(start),
-            document.positionAt(end)
-        ));
-        const startMatch = bodyText.match(/^:\s*/);
+        const startMatch = nodeText.match(/^:\s*/);
         if (startMatch) {
             start += startMatch[0].length;
         }
-        const endMatch = bodyText.match(/\n+$/);
+        const endMatch = nodeText.match(/\n+$/);
+        if (endMatch) {
+            end -= endMatch[0].length;
+        }
+    } else {
+        // For other nodes, trim whitespace from end
+        const endMatch = nodeText.match(/\s+$/);
         if (endMatch) {
             end -= endMatch[0].length;
         }
@@ -712,27 +721,38 @@ function expandSelection(editor: vscode.TextEditor): void {
             syntaxNode = cursor.node;
         }
     }
+    // Helper function to create range selection
+    const rangeSelection = (range: { start: vscode.Position, end: vscode.Position } | null): vscode.Selection | null => {
+        return range ? new vscode.Selection(range.start, range.end) : null;
+    };
 
-    // Choose between syntax node and cell range
-    let newSelection = currentSelection;
-    if (syntaxNode) {
-        const bounds = nodeBounds(syntaxNode, document);
-        const syntaxRange = new vscode.Range(
-            document.positionAt(bounds.start),
-            document.positionAt(bounds.end)
-        );
-        if (isLargerThan(syntaxRange, currentSelection)) {
-            newSelection = new vscode.Selection(syntaxRange.start, syntaxRange.end);
-        }
+    // Get all possible selections
+    const selections = [
+        // Syntax-based selection
+        syntaxNode && rangeSelection({
+            start: document.positionAt(nodeBounds(syntaxNode, document).start),
+            end: document.positionAt(nodeBounds(syntaxNode, document).end)
+        }),
+        // Cell-based selections
+        rangeSelection(getCellRange(document, currentSelection.active, 'implicit')),
+        rangeSelection(getCellRange(document, currentSelection.active, 'explicit'))
+    ].filter((sel): sel is vscode.Selection => sel !== null).sort((a, b) => {
+        const aSize = a.end.line - a.start.line;
+        const bSize = b.end.line - b.start.line;
+        return aSize - bSize;
+    });
+
+    // Find index of first selection larger than current
+    const nextSelectionIndex = selections.findIndex(sel => isLargerThan(sel, currentSelection));
+    console.log("Selected cell index:", nextSelectionIndex, "out of", selections.length, "cells");
+    if (nextSelectionIndex >= 0) {
+        const selectedCell = selections[nextSelectionIndex];
+        const cellText = document.getText(selectedCell);
+        console.log("Last character of selection:", JSON.stringify(cellText[cellText.length - 1]));
     }
 
-    const cellSelection = getCellSelection(document, currentSelection.active);
-    if (cellSelection && isLargerThan(cellSelection, currentSelection) && 
-        (!syntaxNode || isLargerThan(newSelection, cellSelection))) {
-        newSelection = cellSelection;
-    }
-
-    editor.selection = newSelection;
+    // Use found selection or fallback to current
+    editor.selection = nextSelectionIndex >= 0 ? selections[nextSelectionIndex] : currentSelection;
 }
 
 
