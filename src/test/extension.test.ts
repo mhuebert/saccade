@@ -107,5 +107,115 @@ suite('Extension Test Suite', () => {
         assert.deepStrictEqual(metadata, { tag: 'test', id: '123' });
     });
 
+    test('expandSelection grows from cursor to meaningful syntax nodes', async () => {
+        // Note: Using raw string to preserve exact indentation
+        const text = 
+`def greet(name):
+    message = "Hello " + name
+    print(message)
+    return message`;
+
+        const document = await vscode.workspace.openTextDocument({
+            content: text,
+            language: 'python'
+        });
+        const editor = await vscode.window.showTextDocument(document);
+
+        // Start with cursor in "message" variable
+        editor.selection = new vscode.Selection(1, 4, 1, 4);
+
+        // First expansion: selects "message" variable name
+        await vscode.commands.executeCommand('extension.expandSelection');
+        let selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "message");
+
+        // Second expansion: selects entire assignment
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, 'message = "Hello " + name');
+
+        // Second expansion: selects entire assignment
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, `message = "Hello " + name
+    print(message)
+    return message`);
+        
+
+        // Third expansion: selects entire function body
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, text);
+    });
+
+    test('shrinkSelection reverses expansion steps', async () => {
+        const text = 
+`if True:
+    x = 1 + 2
+    print(x)`;
+
+        const document = await vscode.workspace.openTextDocument({
+            content: text,
+            language: 'python'
+        });
+        const editor = await vscode.window.showTextDocument(document);
+
+        // Start with cursor in the expression
+        editor.selection = new vscode.Selection(1, 9, 1, 9);
+
+        // Expand to number
+        await vscode.commands.executeCommand('extension.expandSelection');
+        let selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "1");
+
+        // Expand to full expression
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "1 + 2");
+
+        // Shrink back to number
+        await vscode.commands.executeCommand('extension.shrinkSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "1");
+
+        // Should return to cursor
+        await vscode.commands.executeCommand('extension.shrinkSelection');
+        assert.strictEqual(editor.selection.isEmpty, true);
+        assert.strictEqual(editor.selection.active.line, 1);
+        assert.strictEqual(editor.selection.active.character, 9);
+    });
+
+    test('expandSelection handles nested structures correctly', async () => {
+        const text = 
+`def outer():
+    if condition:
+        for x in range(10):
+            print(x)`;
+
+        const document = await vscode.workspace.openTextDocument({
+            content: text,
+            language: 'python'
+        });
+        const editor = await vscode.window.showTextDocument(document);
+
+        // Start with cursor in print statement
+        editor.selection = new vscode.Selection(3, 13, 3, 13);
+
+        // First expansion: selects function call
+        await vscode.commands.executeCommand('extension.expandSelection');
+        let selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "print");
+
+        // Second expansion: selects print statement
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "print(x)");
+
+        // Third expansion: selects for loop block
+        await vscode.commands.executeCommand('extension.expandSelection');
+        selected = document.getText(editor.selection);
+        assert.strictEqual(selected, "for x in range(10):\n            print(x)");
+    });
+
 });
 

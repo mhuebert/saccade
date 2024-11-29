@@ -626,6 +626,54 @@ function nodeAtCursor(cursorOffset: number, tree: Tree): SyntaxNode | null {
         );
 }
 
+function getCellRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range | null {
+    const cell = getCellAtPosition(document, position);
+    if (!cell) return null;
+    return new vscode.Range(
+        new vscode.Position(cell.startLine, 0),
+        new vscode.Position(cell.endLine, document.lineAt(cell.endLine).text.length)
+    );
+}
+
+function getCellSelection(document: vscode.TextDocument, position: vscode.Position): vscode.Selection | null {
+    const range = getCellRange(document, position);
+    if (!range) return null;
+    return new vscode.Selection(range.start, range.end);
+}
+
+function isLargerThan(range: vscode.Range, selection: vscode.Selection): boolean {
+    return (range.end.line - range.start.line > selection.end.line - selection.start.line) ||
+           (range.end.line - range.start.line === selection.end.line - selection.start.line &&
+            range.end.character - range.start.character > selection.end.character - selection.start.character);
+}
+
+/**
+ * Gets the start and end offsets for a syntax node, adjusting for Python body nodes
+ * by trimming colons, whitespace and trailing newlines.
+ */
+function nodeBounds(node: SyntaxNode, document: vscode.TextDocument): { start: number, end: number } {
+    let start = node.from;
+    let end = node.to;
+
+    if (node.type.name === "Body") {
+        // Trim : and whitespace from start of body, and newlines from end
+        let bodyText = document.getText(new vscode.Range(
+            document.positionAt(start),
+            document.positionAt(end)
+        ));
+        const startMatch = bodyText.match(/^:\s*/);
+        if (startMatch) {
+            start += startMatch[0].length;
+        }
+        const endMatch = bodyText.match(/\n+$/);
+        if (endMatch) {
+            end -= endMatch[0].length;
+        }
+    }
+
+    return { start, end };
+}
+
 function expandSelection(editor: vscode.TextEditor): void {
     if (editor.document.languageId !== 'python') return;
 
@@ -635,14 +683,14 @@ function expandSelection(editor: vscode.TextEditor): void {
     
     state.selectionStack.push(currentSelection);
 
+    // Get next syntax-based selection
     const tree = getParseTree(document);
-    let targetNode: SyntaxNode | null = null;
+    let syntaxNode: SyntaxNode | null = null;
 
     if (currentSelection.isEmpty) {
         const cursorOffset = document.offsetAt(currentSelection.active);
-        targetNode = nodeAtCursor(cursorOffset, tree);
+        syntaxNode = nodeAtCursor(cursorOffset, tree);
     } else {
-        // There's a selection, find its parent
         const selectionStart = document.offsetAt(currentSelection.start);
         const selectionEnd = document.offsetAt(currentSelection.end);
 
@@ -650,27 +698,43 @@ function expandSelection(editor: vscode.TextEditor): void {
         cursor.moveTo(selectionStart, 1);
 
         while (cursor.node) {
-            if (cursor.from < selectionStart || cursor.to > selectionEnd) {
-                targetNode = cursor.node;
+            const bounds = nodeBounds(cursor.node, document);
+
+            if (bounds.start < selectionStart || bounds.end > selectionEnd) {
+                syntaxNode = cursor.node;
                 break;
             }
+
             if (!cursor.parent()) break;
         }
 
-        // If we haven't found a target node, use the root node
-        if (!targetNode) {
-            targetNode = cursor.node;
+        if (!syntaxNode) {
+            syntaxNode = cursor.node;
         }
     }
 
-    if (targetNode) {
-        const newSelection = new vscode.Selection(
-            document.positionAt(targetNode.from),
-            document.positionAt(targetNode.to)
+    // Choose between syntax node and cell range
+    let newSelection = currentSelection;
+    if (syntaxNode) {
+        const bounds = nodeBounds(syntaxNode, document);
+        const syntaxRange = new vscode.Range(
+            document.positionAt(bounds.start),
+            document.positionAt(bounds.end)
         );
-        editor.selection = newSelection;
+        if (isLargerThan(syntaxRange, currentSelection)) {
+            newSelection = new vscode.Selection(syntaxRange.start, syntaxRange.end);
+        }
     }
+
+    const cellSelection = getCellSelection(document, currentSelection.active);
+    if (cellSelection && isLargerThan(cellSelection, currentSelection) && 
+        (!syntaxNode || isLargerThan(newSelection, cellSelection))) {
+        newSelection = cellSelection;
+    }
+
+    editor.selection = newSelection;
 }
+
 
 function shrinkSelection(editor: vscode.TextEditor): void {
     if (editor.document.languageId !== 'python') return;
