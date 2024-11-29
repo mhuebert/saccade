@@ -241,7 +241,7 @@ export function parseMetadata(line: string): Record<string, string> {
 const decorations = {
     createDecoration: vscode.window.createTextEditorDecorationType,
     types: {} as Record<string, vscode.TextEditorDecorationType>,
-    activeFlashes: new Set<vscode.Range>(),
+    activeFlashes: new Map<string, Set<vscode.Range>>(),
 
     initTypes() {
         const accentColor = new vscode.ThemeColor('saccade.accentColor');
@@ -281,12 +281,24 @@ const decorations = {
         };
     },
 
+    getEditorFlashes(editor: vscode.TextEditor): Set<vscode.Range> {
+        const key = editor.document.uri.toString();
+        if (!this.activeFlashes.has(key)) {
+            this.activeFlashes.set(key, new Set());
+        }
+        return this.activeFlashes.get(key)!;
+    },
+
     apply(editor: vscode.TextEditor, range: vscode.Range | null, decorationType: vscode.TextEditorDecorationType) {
         if (range) {
+            const editorFlashes = this.getEditorFlashes(editor);
             if (decorationType === this.types.evaluating) {
-                this.activeFlashes.add(range);
+                editorFlashes.add(range);
             }
-            editor.setDecorations(decorationType, decorationType === this.types.evaluating ? Array.from(this.activeFlashes) : [range]);
+            editor.setDecorations(
+                decorationType, 
+                decorationType === this.types.evaluating ? Array.from(editorFlashes) : [range]
+            );
         }
     },
 
@@ -340,10 +352,11 @@ const decorations = {
             const range = this.getCellRange(editor, cell);
             if (range) {
                 this.apply(editor, range, this.types.evaluating);
+                const editorFlashes = this.getEditorFlashes(editor);
                 const disposable = {
                     dispose: () => {
-                        this.activeFlashes.delete(range);
-                        editor.setDecorations(this.types.evaluating, Array.from(this.activeFlashes));
+                        editorFlashes.delete(range);
+                        editor.setDecorations(this.types.evaluating, Array.from(editorFlashes));
                     }
                 };
                 setTimeout(() => resolve(disposable), 200);
@@ -354,7 +367,8 @@ const decorations = {
     },
 
     clearAllDecorations(editor: vscode.TextEditor) {
-        this.activeFlashes.clear();
+        const key = editor.document.uri.toString();
+        this.activeFlashes.delete(key);
         Object.values(this.types).forEach(decorationType => {
             editor.setDecorations(decorationType, []);
         });
@@ -596,7 +610,15 @@ function exportNotebook(document: vscode.TextDocument): any {
     };
 }
 
-let selectionStack: vscode.Selection[] = [];
+const selectionStacks = new Map<string, vscode.Selection[]>();
+
+function getSelectionStack(editor: vscode.TextEditor): vscode.Selection[] {
+    const key = editor.document.uri.toString();
+    if (!selectionStacks.has(key)) {
+        selectionStacks.set(key, []);
+    }
+    return selectionStacks.get(key)!;
+}
 
 function nodeAtCursor(cursorOffset: number, tree: Tree): SyntaxNode | null {
     let cursor = tree.cursor();
@@ -616,7 +638,7 @@ function expandSelection(editor: vscode.TextEditor): void {
 
     const document = editor.document;
     const currentSelection = editor.selection;
-    selectionStack.push(currentSelection);
+    getSelectionStack(editor).push(currentSelection);
 
     const tree = getParseTree(document);
     let targetNode: SyntaxNode | null = null;
@@ -658,6 +680,7 @@ function expandSelection(editor: vscode.TextEditor): void {
 function shrinkSelection(editor: vscode.TextEditor): void {
     if (editor.document.languageId !== 'python') return;
 
+    const selectionStack = getSelectionStack(editor);
     if (selectionStack.length > 0) {
         editor.selection = selectionStack.pop()!;
         return;
@@ -694,8 +717,9 @@ function shrinkSelection(editor: vscode.TextEditor): void {
     }
 }
 
-function clearSelectionStack() {
-    selectionStack = [];
+function clearSelectionStack(editor: vscode.TextEditor) {
+    const selectionStack = getSelectionStack(editor);
+    selectionStack.length = 0;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -763,7 +787,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 // Clear the selection stack if the selection change wasn't caused by our commands
                 if (!event.kind) {
-                    clearSelectionStack();
+                    clearSelectionStack(editor);
                 }
             }
         }));
@@ -809,7 +833,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         disposables.push(vscode.workspace.onDidChangeTextDocument(() => {
             // Clear the selection stack when the document changes
-            clearSelectionStack();
+            if (vscode.window.activeTextEditor) {clearSelectionStack(vscode.window.activeTextEditor);};
         }));
 
         disposables.push(vscode.commands.registerCommand('extension.evaluateAllCells', async () => {
@@ -817,6 +841,14 @@ export function activate(context: vscode.ExtensionContext) {
             if (editor && isStandardEditor(editor)) {
                 await evaluateAllCells(editor);
             }
+        }));
+
+        disposables.push(vscode.workspace.onDidCloseTextDocument(document => {
+            // Clean up any document-specific state
+            const uri = document.uri.toString();
+            parseStateCache.delete(uri);
+            decorations.activeFlashes.delete(uri);
+            selectionStacks.delete(uri);
         }));
 
         context.subscriptions.push(...disposables);
