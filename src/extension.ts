@@ -641,11 +641,10 @@ function getCellRange(document: vscode.TextDocument, position: vscode.Position, 
         new vscode.Position(cell.endLine, document.lineAt(cell.endLine).text.trimEnd().length)
     );
 }
-
-function isLargerThan(range: vscode.Range, selection: vscode.Selection): boolean {
-    return (range.end.line - range.start.line > selection.end.line - selection.start.line) ||
-           (range.end.line - range.start.line === selection.end.line - selection.start.line &&
-            range.end.character - range.start.character > selection.end.character - selection.start.character);
+function isLargerThan(range: vscode.Range, other: vscode.Range): boolean {
+    return (range.end.line - range.start.line > other.end.line - other.start.line) ||
+           (range.end.line - range.start.line === other.end.line - other.start.line &&
+            range.end.character - range.start.character > other.end.character - other.start.character);
 }
 
 /**
@@ -691,6 +690,7 @@ function expandSelection(editor: vscode.TextEditor): void {
     const state = getDocumentState(document);
     
     state.selectionStack.push(currentSelection);
+    const currentRange = new vscode.Range(currentSelection.start, currentSelection.end);
 
     // Get next syntax-based selection
     const tree = getParseTree(document);
@@ -721,38 +721,30 @@ function expandSelection(editor: vscode.TextEditor): void {
             syntaxNode = cursor.node;
         }
     }
-    // Helper function to create range selection
-    const rangeSelection = (range: { start: vscode.Position, end: vscode.Position } | null): vscode.Selection | null => {
-        return range ? new vscode.Selection(range.start, range.end) : null;
-    };
 
-    // Get all possible selections
-    const selections = [
-        // Syntax-based selection
-        syntaxNode && rangeSelection({
-            start: document.positionAt(nodeBounds(syntaxNode, document).start),
-            end: document.positionAt(nodeBounds(syntaxNode, document).end)
-        }),
-        // Cell-based selections
-        rangeSelection(getCellRange(document, currentSelection.active, 'implicit')),
-        rangeSelection(getCellRange(document, currentSelection.active, 'explicit'))
-    ].filter((sel): sel is vscode.Selection => sel !== null).sort((a, b) => {
+    // Get all possible ranges
+    const ranges = [
+        // Syntax-based range
+        syntaxNode && new vscode.Range(
+            document.positionAt(nodeBounds(syntaxNode, document).start),
+            document.positionAt(nodeBounds(syntaxNode, document).end)
+        ),
+        // Cell-based ranges
+        getCellRange(document, currentSelection.active, 'implicit'),
+        getCellRange(document, currentSelection.active, 'explicit')
+    ].filter((range): range is vscode.Range => range !== null).sort((a, b) => {
         const aSize = a.end.line - a.start.line;
         const bSize = b.end.line - b.start.line;
         return aSize - bSize;
     });
 
-    // Find index of first selection larger than current
-    const nextSelectionIndex = selections.findIndex(sel => isLargerThan(sel, currentSelection));
-    console.log("Selected cell index:", nextSelectionIndex, "out of", selections.length, "cells");
-    if (nextSelectionIndex >= 0) {
-        const selectedCell = selections[nextSelectionIndex];
-        const cellText = document.getText(selectedCell);
-        console.log("Last character of selection:", JSON.stringify(cellText[cellText.length - 1]));
+    // Find index of first range larger than current
+    const nextRangeIndex = ranges.findIndex(range => isLargerThan(range, currentRange));
+    
+    if (nextRangeIndex >= 0) {
+        const selectedRange = ranges[nextRangeIndex];
+        editor.selection = new vscode.Selection(selectedRange.start, selectedRange.end);
     }
-
-    // Use found selection or fallback to current
-    editor.selection = nextSelectionIndex >= 0 ? selections[nextSelectionIndex] : currentSelection;
 }
 
 
